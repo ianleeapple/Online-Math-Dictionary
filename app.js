@@ -6,6 +6,9 @@ const app = express(); // 建立 Express 應用程式
 app.set("views", path.resolve(__dirname, "views"));
 app.set("view engine", "ejs");
 
+// 設定靜態檔案目錄
+app.use(express.static(path.join(__dirname, 'public')));
+
 // 設定首頁路由
 app.get("/", function(request, response) {
   response.render("index");

@@ -1,3 +1,28 @@
 <%- include('header'); -%>
-<p>建置狀態:良</p>
+<div class="navbar">
+    <a href="#" style="margin-right: auto;"><img src="#" alt="首頁LOGO"></a>
+    <a href="#"><i style="font-size: 14px;" class="fa-solid fa-house-chimney"></i>&nbsp;首頁</a>
+    <a href="#"><i style="font-size: 14px;" class="fa-solid fa-bullhorn"></i>&nbsp;最新消息</a>
+    <div class="dropdown">
+        <a href="#"><i style="font-size: 14px;" class="fa-solid fa-cloud"></i>&nbsp;關於本站</a>
+        <div class="dropdown-content">
+            <a href="#">使用說明</a>
+            <a href="#">常見問題</a>
+            <a href="#">聯絡我們</a>
+        </div>
+    </div>
+    <div class="dropdown">
+        <a href="#"><i style="font-size: 14px;" class="fa-regular fa-id-card"></i>&nbsp;我的帳號</a>
+        <div class="dropdown-content">
+            <!--登出狀態選單-->
+            <a href="#">註冊</a>
+            <a href="#">登入</a>
+            <!--登入狀態選單-->
+            <a href="#">搜尋紀錄</a>
+            <a href="#">學習分析</a>
+            <a href="#">登出</a>
+        </div>
+    </div>
+    <a href="#" style="margin-left: auto; color: #fff;font-weight: normal;" class="btn"><i class="fa-solid fa-reply"></i>&nbsp;問題回報</a>
+</div>
 <%- include('footer'); -%>
