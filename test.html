@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線上數學辭典-首頁</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #fafafa;
+        }
+        .navbar {
+            top: 0;
+            position: sticky;
+            background-color: #e3ddd8;
+            display: flex;
+            align-items: center;  /* 確保所有項目垂直對齊 */
+            justify-content: center; /* 讓選單水平置中 */
+            padding: 10px;
+            font-size: 18px;
+            font-weight: bold; /* 設定字體加粗 */
+        }
+        .navbar a, .dropdown > a {
+            color: #594237;
+            padding: 14px 20px;
+            text-decoration: none;
+            display: flex;  /* 讓內容垂直居中 */
+            align-items: center;
+            height: 50px;  /* 統一高度 */
+        }
+        .navbar a:hover, .dropdown > a:hover {
+            color: #d78585;
+        }
+        .dropdown {
+            position: relative;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #fff;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.2);
+            z-index: 1;
+        }
+        .dropdown-content a {
+            background: #e3ddd8;
+            color: #594237;
+            padding: 12px 16px;
+            display: block;
+        }
+        .dropdown-content a:hover {
+            background-color: #dbcfc4;
+            color: #d78585;
+        }
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+        /* 頁尾樣式 */
+        .footer {
+            background-color: #e3ddd8;
+            padding: 20px 0;
+            text-align: center;
+            color: #594237;
+            font-size: 14px;
+            border-top: 2px solid #d78585;
+        }
+        .footer a {
+            color: #594237;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            color: #d78585;
+        }
+        /* 按鈕樣式 */
+        .btn {
+            padding: 5px 10px;
+            background-color: #d78585;
+            border: none;
+            border-radius: 3px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        /* 按鈕懸停效果 */
+        .btn:hover {
+            background-color: #b66363;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <a href="#" style="margin-right: auto;"><img src="#" alt="首頁LOGO"></a>
+        <a href="#"><i style="font-size: 14px;" class="fa-solid fa-house-chimney"></i>&nbsp;首頁</a>
+        <a href="#"><i style="font-size: 14px;" class="fa-solid fa-bullhorn"></i>&nbsp;最新消息</a>
+        <div class="dropdown">
+            <a href="#"><i style="font-size: 14px;" class="fa-solid fa-cloud"></i>&nbsp;關於本站</a>
+            <div class="dropdown-content">
+                <a href="#">使用說明</a>
+                <a href="#">常見問題</a>
+                <a href="#">聯絡我們</a>
+            </div>
+        </div>
+        <div class="dropdown">
+            <a href="#"><i style="font-size: 14px;" class="fa-regular fa-id-card"></i>&nbsp;我的帳號</a>
+            <div class="dropdown-content">
+                <!--登出狀態選單-->
+                <a href="#">註冊</a>
+                <a href="#">登入</a>
+                <!--登入狀態選單-->
+                <a href="#">搜尋紀錄</a>
+                <a href="#">學習分析</a>
+                <a href="#">登出</a>
+            </div>
+        </div>
+        <a href="#" style="margin-left: auto; color: #fff;font-weight: normal;" class="btn"><i class="fa-solid fa-reply"></i>&nbsp;問題回報</a>
+    </div>
+
+    <div class="footer">
+        <p>&copy; 2025 線上數學辭典. 版權所有.</p>
+        <p><a href="#">隱私政策</a> | <a href="#">使用條款</a></p>
+    </div>
+</body>
+</html>
