@@ -1,0 +1,9 @@
+download node.js
+
+type these in terminal:
+pip install npm
+npm install express
+npm install -g nodemon
+
+then run it:
+nodemon app.js
