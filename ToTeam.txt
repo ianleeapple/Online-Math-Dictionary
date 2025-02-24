@@ -6,7 +6,7 @@ How to build:
         pip install npm
         npm install express
         npm install -g nodemon
-        npm install express
+        npm install ejs
 
     then run it:
         nodemon app.js
