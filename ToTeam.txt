@@ -4,6 +4,7 @@ type these in terminal:
 pip install npm
 npm install express
 npm install -g nodemon
+npm install express
 
 then run it:
 nodemon app.js
