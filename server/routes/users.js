@@ -1,14 +1,14 @@
-// routes/users.js
+// routes/users.js 負責註冊、登入、登出 包含 JWT 驗證的使用者管理功能
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
 
-// JWT 密鑰（實際上應儲存在環境變數中）
+// JWT 密鑰（實際上應儲存在環境變數中）   !尚未處理
 const JWT_SECRET = 'your_jwt_secret_key';
 
-// 建立資料庫連線（依實際資料庫設定修改）
+// 建立資料庫連線（依實際資料庫設定修改）   !尚未處理(沒資料庫)
 const dbConfig = {
   host: 'localhost',
   user: 'root',
