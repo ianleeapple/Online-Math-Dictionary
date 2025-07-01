@@ -19,3 +19,8 @@ app.use('/api/users', userRoutes);
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
+
+//use quiz api
+const quizRoutes = require('./routes/quiz');
+app.use('/api/quiz', quizRoutes);
+
