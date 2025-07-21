@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>使用者註冊</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background-color: #f9f9f9;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      color: #2d2d2d;
+      margin-bottom: 30px;
+    }
+    .role-select {
+      display: flex;
+      justify-content: center;
+      gap: 50px;
+      margin-bottom: 40px;
+    }
+    .role-option {
+      text-align: center;
+      cursor: pointer;
+    }
+    .role-option img {
+      width: 100px;
+      height: 100px;
+      border-radius: 10px;
+      border: 3px solid transparent;
+      transition: border-color 0.3s;
+    }
+    .role-option:hover img,
+    .role-option.active img {
+      border-color: #d67b7b;
+    }
+    .identity-display {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .identity-display img {
+      width: 50px;
+      height: 50px;
+      border-radius: 8px;
+    }
+    .login-container {
+      border: 2px solid #d0d6dc;
+      border-radius: 10px;
+      padding: 30px 40px;
+      background-color: white;
+      width: 100%;
+      max-width: 100%;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+      margin: 10px auto;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #2d2d2d;
+    }
+    .form-body {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #333;
+    }
+    input[type="text"],
+    input[type="password"],
+    input[type="date"],
+    select {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    .btn {
+      background-color: #d67b7b;
+      color: white;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+    .btn:hover {
+      background-color: #c06565;
+    }
+    .hidden {
+      display: none;
+    }
+    .form-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+      max-width: 900px;
+    }
+    @media (min-width: 768px) {
+      .form-wrapper {
+        flex-direction: row;
+        justify-content: center;
+        align-items: stretch;
+      }
+      .login-container {
+        flex: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1 id="select-title">請選擇身分</h1>
+
+  <div class="role-select" id="role-select">
+    <div class="role-option" onclick="selectRole('學生')" id="student-option">
+      <img src="./student.png" alt="學生圖示">
+      <div>我是學生</div>
+    </div>
+    <div class="role-option" onclick="selectRole('老師')" id="teacher-option">
+      <img src="./teacher.png" alt="老師圖示">
+      <div>我是老師</div>
+    </div>
+  </div>
+
+  <div class="identity-display hidden" id="identity-display">
+    <img id="identity-img" src="" alt="身分圖示">
+    <span id="identity-text"></span>
+  </div>
+
+  <div class="form-wrapper">
+    <div class="login-container hidden" id="register-box">
+      <h2>使用者註冊</h2>
+      <div class="form-body">
+        <div class="form-group">
+          <label for="register-role">選擇身分</label>
+          <select id="register-role" onchange="updateIdentityDisplay(this.value)">
+            <option value="學生">學生</option>
+            <option value="老師">老師</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="register-school">姓名</label>
+          <input type="text" id="register-name" placeholder="請輸入姓名">
+        </div>
+        <div class="form-group">
+          <label for="register-school">學校</label>
+          <input type="text" id="register-school" placeholder="請輸入學校名稱">
+        </div>
+        <div class="form-group">
+          <label for="register-birthday">生日</label>
+          <input type="date" id="register-birthday">
+        </div>
+        <div class="form-group">
+          <label for="register-username">帳號</label>
+          <input type="text" id="register-username" placeholder="請輸入帳號">
+        </div>
+        <div class="form-group">
+          <label for="register-password">密碼</label>
+          <input type="password" id="register-password" placeholder="請輸入密碼">
+        </div>
+        <div class="form-group">
+          <label for="register-password-confirm">確認密碼</label>
+          <input type="password" id="register-password-confirm" placeholder="請再次輸入密碼">
+        </div>
+      </div>
+      <button class="btn" style="width: 100%;">註冊</button>
+    </div>
+  </div>
+
+  <script>
+    function selectRole(role) {
+      // 顯示註冊區塊
+      document.getElementById('register-box').classList.remove('hidden');
+      document.getElementById('identity-display').classList.remove('hidden');
+
+      // 設定初始角色到 select 欄位
+      document.getElementById('register-role').value = role;
+
+      // 更新上方身分顯示
+      updateIdentityDisplay(role);
+
+      // 隱藏選擇畫面
+      document.getElementById('role-select').classList.add('hidden');
+      document.getElementById('select-title').classList.add('hidden');
+
+      // 設定圖片active
+      document.getElementById('student-option').classList.remove('active');
+      document.getElementById('teacher-option').classList.remove('active');
+      if (role === '學生') {
+        document.getElementById('student-option').classList.add('active');
+      } else {
+        document.getElementById('teacher-option').classList.add('active');
+      }
+    }
+
+    function updateIdentityDisplay(role) {
+      const img = document.getElementById('identity-img');
+      const text = document.getElementById('identity-text');
+      if (role === '學生') {
+        img.src = './student.png';
+        text.textContent = '目前身分：學生';
+      } else {
+        img.src = './teacher.png';
+        text.textContent = '目前身分：老師';
+      }
+
+      // 同步註冊的下拉選單
+      document.getElementById('register-role').value = role;
+    }
+  </script>
+</body>
+</html>
