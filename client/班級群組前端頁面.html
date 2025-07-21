@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>班級群組</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background-color: #f9f9f9;
+      padding: 20px;
+    }
+    h2 {
+      margin-bottom: 20px;
+    }
+    .group-container {
+      border: 2px solid #d0d6dc;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background-color: white;
+    }
+    .group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .group-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #2d2d2d;
+    }
+    .btn {
+      background-color: #d67b7b;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn:hover {
+      background-color: #c06565;
+    }
+    .student-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .student-table th,
+    .student-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .student-table th {
+      background-color: #f2f2f2;
+      font-weight: bold;
+    }
+    .create-group {
+      margin-bottom: 30px;
+    }
+    .create-group input {
+      padding: 8px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>班級群組管理（老師）</h2>
+
+  <div class="create-group">
+    <input type="text" placeholder="請輸入新群組名稱">
+    <button class="btn">建立班級群組</button>
+  </div>
+
+  <div class="group-container">
+    <div class="group-header">
+      <span class="group-title">數學A班</span>
+      <button class="btn">新增學生</button>
+    </div>
+
+    <table class="student-table">
+      <thead>
+        <tr>
+          <th>學生帳號</th>
+          <th>學生姓名</th>
+          <th>最後上線時間</th>
+          <th>最後登入 IP</th>
+          <th>最近測驗成績</th>
+          <th>平均成績</th>
+          <th>學生詳細資訊</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>student01</td>
+          <td>陳小明</td>
+          <td>2025/05/22 14:10</td>
+          <td>192.168.0.12</td>
+          <td>90 分</td>
+          <td>87 分</td>
+          <td><button class="btn">查看</button></td>
+        </tr>
+        <tr>
+          <td>student02</td>
+          <td>陳大名</td>
+          <td>2025/05/21 10:30</td>
+          <td>192.168.0.33</td>
+          <td>75 分</td>
+          <td>79 分</td>
+          <td><button class="btn">查看</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</body>
+</html>
