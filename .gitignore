@@ -1,6 +1,3 @@
-# Custom configuration files
-*.github
-
 # Logs
 logs
 *.log
@@ -10,10 +7,29 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
+# Dependency directories
+# This will ignore node_modules in the root and in /server
+node_modules/
+
+# Vite build output
 dist
 dist-ssr
+
+# Vite cache
+.vite/
+
+# Environment variables
+# Never commit secrets!
+.env
+.env.*
+!.env.example
+
+# Local files
 *.local
+
+# Test reports
+coverage
+.nyc_output
 
 # Editor directories and files
 .vscode/*
