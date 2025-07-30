@@ -70,38 +70,32 @@
 </template>
 
 <script setup>
-import { reactive } from 'vue';
-
-const records = reactive([
-  {
-    date: "2025/04/20",
-    topic: "一元一次方程式",
-    duration: "15 分鐘",
-    subject: "解一元一次方程式",
-    concept: "代數基本運算",
-    difficulty: "中等",
-    questionCount: 20,
-    timerMode: "正向計時",
-    type: "選擇題",
-    score: 85,
-    corrected: true,
-    expanded: false
-  },
-  {
-    date: "2025/04/15",
-    topic: "二元一次方程式",
-    duration: "20 分鐘",
-    subject: "代數",
-    concept: "解聯立方程式",
-    difficulty: "困難",
-    questionCount: 15,
-    timerMode: "倒數計時",
-    type: "填空題",
-    score: 70,
-    corrected: false,
-    expanded: false
+import { reactive, onMounted } from 'vue';
+const records = reactive([]);
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/quizzes');
+    const quizzes = await res.json();
+    quizzes.forEach(q => {
+      records.push({
+        date: q.created_at ? q.created_at.split('T')[0] : '',
+        topic: q.title || '',
+        duration: q.duration || '',
+        subject: q.subject || '',
+        concept: q.concept || '',
+        difficulty: q.difficulty || '',
+        questionCount: q.count || '',
+        timerMode: q.timerMode || '',
+        type: q.type || '',
+        score: q.score || '',
+        corrected: q.corrected || false,
+        expanded: false
+      });
+    });
+  } catch (e) {
+    console.error('API 請求失敗', e);
   }
-]);
+});
 
 function toggle(index) {
   records[index].expanded = !records[index].expanded;

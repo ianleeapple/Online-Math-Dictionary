@@ -3,11 +3,31 @@ USE math_platform;
 
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(50),
-  email VARCHAR(100) UNIQUE,
-  password VARCHAR(255),
-  role ENUM('學生','老師'),
+  name VARCHAR(50) NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  role ENUM('學生','老師') NOT NULL,
+  school VARCHAR(100),
+  birthday DATE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS classes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  code VARCHAR(10) UNIQUE NOT NULL,
+  teacher_id INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS class_members (
+  class_id INT,
+  student_id INT,
+  joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (class_id, student_id),
+  FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+  FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS quiz (
@@ -15,8 +35,14 @@ CREATE TABLE IF NOT EXISTS quiz (
   user_id INT,
   title VARCHAR(100),
   score INT,
+  concept VARCHAR(100),
+  difficulty VARCHAR(50),
+  question_count INT,
+  timing_mode VARCHAR(50),
+  question_types VARCHAR(255),
+  corrected BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id)
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS achievement (
@@ -26,5 +52,5 @@ CREATE TABLE IF NOT EXISTS achievement (
   achieved BOOLEAN,
   description VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id)
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
