@@ -15,7 +15,9 @@
 </template>
 
 <script setup>
-const items = [
+import { ref, onMounted } from 'vue';
+
+const items = ref([
   {
     title: '我的帳號',
     description: '查看或編輯個人基本資料及查看成就。',
@@ -40,7 +42,27 @@ const items = [
     button: '查看紀錄',
     action: 'records'
   }
-];
+]);
+
+onMounted(async () => {
+  try {
+    // 取得所有用戶
+    const usersRes = await fetch('/api/users');
+    const users = await usersRes.json();
+    // 取得所有測驗
+    const quizzesRes = await fetch('/api/quizzes');
+    const quizzes = await quizzesRes.json();
+    // 取得所有成就
+    const achievementsRes = await fetch('/api/achievements');
+    const achievements = await achievementsRes.json();
+    // 動態顯示統計數量（可依需求調整顯示位置與內容）
+    items.value[0].description += `（目前用戶數：${users.length}）`;
+    items.value[2].description += `（目前題庫數：${quizzes.length}）`;
+    items.value[0].description += `（成就種類：${achievements.length}）`;
+  } catch (e) {
+    console.error('API 請求失敗', e);
+  }
+});
 
 function navigate(action) {
   console.log(`前往 ${action}`);

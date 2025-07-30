@@ -60,8 +60,25 @@ function selectRole(r) {
     roleSelected.value = true;
   }, 120);
 }
-function onLogin() {
-  alert(`身份：${role.value}\n帳號：${account.value}\n密碼：${password.value}\n（登入功能尚未串接 API）`);
+async function onLogin() {
+  try {
+    const res = await fetch('/api/users');
+    const users = await res.json();
+    const user = users.find(u => u.email === account.value && u.role === role.value);
+    if (!user) {
+      alert('查無此帳號或身份');
+      return;
+    }
+    // 密碼比對（實際應後端驗證，這裡僅示範）
+    if (user.password !== password.value) {
+      alert('密碼錯誤');
+      return;
+    }
+    alert('登入成功！');
+    // 可導向首頁或個人頁
+  } catch (e) {
+    alert('登入失敗：' + e.message);
+  }
 }
 function onForgot() {
   alert('請聯絡管理員重設密碼');

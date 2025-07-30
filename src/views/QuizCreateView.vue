@@ -93,7 +93,7 @@ const customTime = ref('');
 const selectedQuestionTypes = ref([]);
 const concepts = computed(() => selectedTopic.value ? allConcepts[selectedTopic.value] : []);
 watch(selectedTopic, () => { selectedConcept.value = ''; });
-function createQuiz() {
+async function createQuiz() {
   const payload = {
     topic: selectedTopic.value,
     concept: selectedConcept.value,
@@ -102,7 +102,18 @@ function createQuiz() {
     timing: selectedTiming.value === 'custom' ? `custom-${customTime.value}` : selectedTiming.value,
     questionTypes: selectedQuestionTypes.value
   };
-  alert(`建立測驗資料：\n${JSON.stringify(payload, null, 2)}\n（尚未串接 API）`);
+  try {
+    const res = await fetch('/api/quizzes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('建立失敗');
+    const data = await res.json();
+    alert('建立成功！\n' + JSON.stringify(data, null, 2));
+  } catch (e) {
+    alert('建立失敗：' + e.message);
+  }
 }
 </script>
 

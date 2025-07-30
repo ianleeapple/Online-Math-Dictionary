@@ -79,12 +79,32 @@ function selectRole(r) {
     roleSelected.value = true;
   }, 120);
 }
-function onRegister() {
+async function onRegister() {
   if (form.value.password !== form.value.passwordConfirm) {
     alert('兩次密碼輸入不一致');
     return;
   }
-  alert(`註冊資料：\n身分：${role.value}\n姓名：${form.value.name}\n學校：${form.value.school}\n生日：${form.value.birthday}\n帳號：${form.value.account}\n（註冊功能尚未串接 API）`);
+  const payload = {
+    name: form.value.name,
+    school: form.value.school,
+    birthday: form.value.birthday,
+    email: form.value.account,
+    password: form.value.password,
+    role: role.value
+  };
+  try {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('註冊失敗');
+    const data = await res.json();
+    alert('註冊成功！\n' + JSON.stringify(data, null, 2));
+    // 可導向登入頁
+  } catch (e) {
+    alert('註冊失敗：' + e.message);
+  }
 }
 </script>
 

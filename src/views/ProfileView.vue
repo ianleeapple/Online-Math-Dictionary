@@ -28,20 +28,46 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+
 const profile = ref({
-  account: 'student01',
-  name: '陳小明',
-  school: '臺北市立建國高級中學',
-  role: '學生',
-  birthday: '2000年01月01日'
+  account: '',
+  name: '',
+  school: '',
+  role: '',
+  birthday: ''
 });
-const achievements = ref([
-  { title: '完成 10 次測驗', achieved: true, desc: '你已完成 10 次以上的測驗' },
-  { title: '訂正 30 題', achieved: true, desc: '你已完成 30 題以上的訂正' },
-  { title: '連續登入 7 天', achieved: false, desc: '連續一週每天登入系統' },
-  { title: '建立 5 張錯題筆記', achieved: false, desc: '養成整理錯題習慣' }
-]);
+const achievements = ref([]);
+
+onMounted(async () => {
+  try {
+    // 取得所有用戶（實際應根據登入者取得特定用戶）
+    const usersRes = await fetch('/api/users');
+    const users = await usersRes.json();
+    // 這裡僅取第一位作為範例
+    if (users.length > 0) {
+      const u = users[0];
+      profile.value = {
+        account: u.email,
+        name: u.name,
+        school: u.school || '',
+        role: u.role,
+        birthday: u.birthday || ''
+      };
+    }
+    // 取得所有成就（實際應根據 user_id 過濾）
+    const achievementsRes = await fetch('/api/achievements');
+    const achs = await achievementsRes.json();
+    achievements.value = achs.map(a => ({
+      title: a.type,
+      achieved: !!a.achieved,
+      desc: a.description
+    }));
+  } catch (e) {
+    console.error('API 請求失敗', e);
+  }
+});
+
 function onEdit() {
   alert('編輯個人檔案功能尚未開放');
 }

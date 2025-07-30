@@ -48,7 +48,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 
 const newGroupName = ref('');
 const expandedIndex = ref(null);
@@ -58,74 +58,31 @@ function generateCode() {
   return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
-const groups = ref([
-  {
-    name: '數學A班',
-    code: generateCode(),
-    students: [
+const groups = ref([]);
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/users');
+    const users = await res.json();
+    // 假設所有學生分為一班，實際應根據班級資料分組
+    groups.value = [
       {
-        username: 'student01',
-        name: '陳小明',
-        lastOnline: '2025/05/22 14:10',
-        ip: '192.168.0.12',
-        latestScore: '90 分',
-        avgScore: '87 分'
-      },
-      {
-        username: 'student02',
-        name: '陳大名',
-        lastOnline: '2025/05/21 10:30',
-        ip: '192.168.0.33',
-        latestScore: '75 分',
-        avgScore: '79 分'
+        name: '數學A班',
+        code: generateCode(),
+        students: users.map(u => ({
+          username: u.email,
+          name: u.name,
+          lastOnline: '',
+          ip: '',
+          latestScore: '',
+          avgScore: ''
+        }))
       }
-    ]
-  },
-  {
-    name: '數學B班',
-    code: generateCode(),
-    students: [
-      {
-        username: 'student03',
-        name: '林語堂',
-        lastOnline: '2025/05/20 16:00',
-        ip: '192.168.0.45',
-        latestScore: '85 分',
-        avgScore: '82 分'
-      },
-      {
-        username: 'student04',
-        name: '張雅文',
-        lastOnline: '2025/05/18 09:50',
-        ip: '192.168.0.58',
-        latestScore: '88 分',
-        avgScore: '86 分'
-      }
-    ]
-  },
-  {
-    name: '數學C班',
-    code: generateCode(),
-    students: [
-      {
-        username: 'student03',
-        name: '林粼粼',
-        lastOnline: '2025/05/20 16:00',
-        ip: '192.168.0.45',
-        latestScore: '85 分',
-        avgScore: '82 分'
-      },
-      {
-        username: 'student04',
-        name: '張章璋',
-        lastOnline: '2025/05/18 09:50',
-        ip: '192.168.0.58',
-        latestScore: '88 分',
-        avgScore: '86 分'
-      }
-    ]
+    ];
+  } catch (e) {
+    console.error('API 請求失敗', e);
   }
-]);
+});
+
 
 function createGroup() {
   if (newGroupName.value.trim()) {
