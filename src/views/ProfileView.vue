@@ -2,7 +2,9 @@
   <div class="profile-bg">
     <div class="profile-header">
       <h2>個人基本資料</h2>
-      <button class="btn" @click="onEdit">編輯個人檔案</button>
+      <div>
+        <button class="btn" @click="onEdit">編輯個人檔案</button>
+      </div>
     </div>
     <div class="section user-info">
       <p><strong>帳號：</strong>{{ profile.account }}</p>
@@ -41,21 +43,26 @@ const achievements = ref([]);
 
 onMounted(async () => {
   try {
-    // 取得所有用戶（實際應根據登入者取得特定用戶）
-    const usersRes = await fetch('/api/users');
-    const users = await usersRes.json();
-    // 這裡僅取第一位作為範例
-    if (users.length > 0) {
-      const u = users[0];
+    // 從 localStorage 取得目前登入的使用者資訊
+    const currentUserData = localStorage.getItem('currentUser');
+    
+    if (currentUserData) {
+      const currentUser = JSON.parse(currentUserData);
+      
       profile.value = {
-        account: u.email,
-        name: u.name,
-        school: u.school || '',
-        role: u.role,
-        birthday: u.birthday || ''
+        account: currentUser.email,
+        name: currentUser.name,
+        school: currentUser.school || '未填寫',
+        role: currentUser.role,
+        birthday: currentUser.birthday ? new Date(currentUser.birthday).toLocaleDateString('zh-TW') : '未填寫'
       };
+    } else {
+      // 如果沒有登入資訊，顯示提示
+      alert('請先登入');
+      return;
     }
-    // 取得所有成就（實際應根據 user_id 過濾）
+    
+    // 取得該使用者的成就（實際應根據 user_id 過濾）
     const achievementsRes = await fetch('/api/achievements');
     const achs = await achievementsRes.json();
     achievements.value = achs.map(a => ({
@@ -64,7 +71,7 @@ onMounted(async () => {
       desc: a.description
     }));
   } catch (e) {
-    console.error('API 請求失敗', e);
+    console.error('載入個人資料失敗', e);
   }
 });
 
