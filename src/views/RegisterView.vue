@@ -61,6 +61,9 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 const role = ref('學生');
 const tempRole = ref('');
 const roleSelected = ref(false);
@@ -72,6 +75,7 @@ const form = ref({
   password: '',
   passwordConfirm: ''
 });
+
 function selectRole(r) {
   tempRole.value = r;
   setTimeout(() => {
@@ -79,6 +83,7 @@ function selectRole(r) {
     roleSelected.value = true;
   }, 120);
 }
+
 async function onRegister() {
   if (form.value.password !== form.value.passwordConfirm) {
     alert('兩次密碼輸入不一致');
@@ -100,8 +105,9 @@ async function onRegister() {
     });
     if (!res.ok) throw new Error('註冊失敗');
     const data = await res.json();
-    alert('註冊成功！\n' + JSON.stringify(data, null, 2));
-    // 可導向登入頁
+    alert('註冊成功！正在跳轉到登入頁面...');
+    // 跳轉到登入頁面
+    router.push('/login');
   } catch (e) {
     alert('註冊失敗：' + e.message);
   }

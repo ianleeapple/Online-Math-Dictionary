@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
+const { hashPassword, verifyPassword } = require('./auth');
 
 // 取得所有使用者
 router.get('/users', async (req, res) => {
@@ -23,12 +24,16 @@ router.get('/quizzes', async (req, res) => {
 // 新增使用者 (註冊)
 router.post('/users', async (req, res) => {
   const { name, email, password, role, school, birthday } = req.body;
-  // 密碼應進行雜湊處理，這裡僅為示範
+  
   try {
+    // 將密碼進行雜湊處理
+    const hashedPassword = await hashPassword(password);
+    
     const [result] = await pool.query(
       'INSERT INTO users (name, email, password, role, school, birthday) VALUES (?, ?, ?, ?, ?, ?)', 
-      [name, email, password, role, school, birthday]
+      [name, email, hashedPassword, role, school, birthday]
     );
+    
     res.status(201).json({ id: result.insertId, name, email, role });
   } catch (error) {
     // 處理 email 重複等錯誤
@@ -36,7 +41,48 @@ router.post('/users', async (req, res) => {
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ message: '此 Email 已被註冊' });
     }
-    res.status(500).json({ message: '資料庫錯誤', error });
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+
+// 使用者登入
+router.post('/login', async (req, res) => {
+  const { email, password, role } = req.body;
+  try {
+    // 先取得使用者資料（包含雜湊密碼）
+    const [rows] = await pool.query(
+      'SELECT id, name, email, role, school, birthday, password FROM users WHERE email = ? AND role = ?',
+      [email, role]
+    );
+    
+    if (rows.length === 0) {
+      return res.status(401).json({ message: '帳號或身份不正確' });
+    }
+    
+    const user = rows[0];
+    
+    // 驗證密碼
+    const isPasswordValid = await verifyPassword(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: '密碼錯誤' });
+    }
+    
+    // 絕對不要在回應中包含密碼！
+    res.status(200).json({ 
+      message: '登入成功', 
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role,
+        school: user.school,
+        birthday: user.birthday
+        // 注意：這裡故意不包含密碼
+      }
+    });
+  } catch (error) {
+    console.error('登入失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
   }
 });
 

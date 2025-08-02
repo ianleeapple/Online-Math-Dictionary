@@ -48,11 +48,15 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 const role = ref('學生');
 const tempRole = ref('');
 const roleSelected = ref(false);
 const account = ref('');
 const password = ref('');
+
 function selectRole(r) {
   tempRole.value = r;
   setTimeout(() => {
@@ -60,26 +64,44 @@ function selectRole(r) {
     roleSelected.value = true;
   }, 120);
 }
+
 async function onLogin() {
   try {
-    const res = await fetch('/api/users');
-    const users = await res.json();
-    const user = users.find(u => u.email === account.value && u.role === role.value);
-    if (!user) {
-      alert('查無此帳號或身份');
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: account.value,
+        password: password.value,
+        role: role.value
+      })
+    });
+    
+    const data = await res.json();
+    
+    if (!res.ok) {
+      alert(data.message || '登入失敗');
       return;
     }
-    // 密碼比對（實際應後端驗證，這裡僅示範）
-    if (user.password !== password.value) {
-      alert('密碼錯誤');
-      return;
-    }
-    alert('登入成功！');
-    // 可導向首頁或個人頁
+    
+    alert(`登入成功！歡迎 ${data.user.name}，正在跳轉到個人資料頁面...`);
+    
+    // 將使用者資訊儲存到 localStorage
+    localStorage.setItem('currentUser', JSON.stringify(data.user));
+    
+    // 觸發 storage 事件，讓 App.vue 知道登入狀態已變更
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'currentUser',
+      newValue: JSON.stringify(data.user)
+    }));
+    
+    // 跳轉到個人資料頁面
+    router.push('/profile');
   } catch (e) {
     alert('登入失敗：' + e.message);
   }
 }
+
 function onForgot() {
   alert('請聯絡管理員重設密碼');
 }

@@ -94,6 +94,44 @@ const selectedQuestionTypes = ref([]);
 const concepts = computed(() => selectedTopic.value ? allConcepts[selectedTopic.value] : []);
 watch(selectedTopic, () => { selectedConcept.value = ''; });
 async function createQuiz() {
+  // 驗證所有必要欄位
+  const errors = [];
+  
+  if (!selectedTopic.value) {
+    errors.push('請選擇主題');
+  }
+  
+  if (!selectedConcept.value) {
+    errors.push('請選擇觀念');
+  }
+  
+  if (!selectedDifficulty.value) {
+    errors.push('請選擇難易度');
+  }
+  
+  if (!selectedCount.value) {
+    errors.push('請選擇題數');
+  }
+  
+  if (!selectedTiming.value) {
+    errors.push('請選擇計時方式');
+  }
+  
+  // 如果選擇自訂計時，檢查自訂時間是否有填寫
+  if (selectedTiming.value === 'custom' && (!customTime.value || customTime.value <= 0)) {
+    errors.push('請填寫有效的自訂時間（大於 0 分鐘）');
+  }
+  
+  if (selectedQuestionTypes.value.length === 0) {
+    errors.push('請至少選擇一種題型');
+  }
+  
+  // 如果有錯誤，顯示錯誤訊息並停止執行
+  if (errors.length > 0) {
+    alert('請完成以下必填欄位：\n' + errors.join('\n'));
+    return;
+  }
+  
   const payload = {
     topic: selectedTopic.value,
     concept: selectedConcept.value,
@@ -102,6 +140,7 @@ async function createQuiz() {
     timing: selectedTiming.value === 'custom' ? `custom-${customTime.value}` : selectedTiming.value,
     questionTypes: selectedQuestionTypes.value
   };
+  
   try {
     const res = await fetch('/api/quizzes', {
       method: 'POST',
