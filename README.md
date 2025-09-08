@@ -19,6 +19,9 @@
 *   **安全性 (Security)**: bcrypt 密碼雜湊, JWT (準備中)
 *   **開發工具**: Vite 開發伺服器, 熱重載
 
+*   **AI 類題生成功能**：支援 OpenAI GPT 類模型自動產生數學題目，並可於 `/ai-test` 頁面測試與管理
+*   **API 金鑰管理**：AI 服務金鑰透過 `.env` 設定，預設支援 OpenAI
+
 ## 🔒 安全特性
 
 *   **密碼安全**：使用 bcrypt 進行密碼雜湊處理 (Salt rounds: 12)
@@ -29,6 +32,22 @@
 ---
 
 ## 🚀 專案啟動指南
+
+### AI 類題生成功能快速啟用
+
+1.  進入 `server` 目錄安裝 openai 依賴：
+    ```bash
+    cd server
+    npm install openai
+    ```
+2.  於 `server/.env` 加入你的 OpenAI API 金鑰：
+    ```env
+    # AI 金鑰設定
+    OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ```
+3.  啟動後端伺服器，前端進入 `/ai-test` 頁面即可測試 AI 類題自動生成。
+
+> 若無金鑰或額度，系統會自動 fallback 回傳假資料，方便前端測試。
 
 請遵循以下步驟來在本機環境設定並執行此專案。
 
@@ -108,6 +127,30 @@
     成功後會看到本地網址 (通常是 `http://localhost:5173`)
 
 3.  **開啟瀏覽器**訪問前端網址即可開始使用
+
+---
+
+## 🤖 AI 類題生成功能說明
+
+### /ai-test 測試頁面
+
+* 進入 `/ai-test` 可輸入題目、題型、難度等，呼叫 AI 產生多個類似題目，並可直接加入題庫。
+* 後端預設串接 OpenAI GPT-3.5-turbo，若無金鑰則自動回傳假資料。
+* 若需更換 AI provider，請於 `server/routes.js` 調整。
+
+### 常見問題（AI 相關）
+
+**Q: 沒有 OpenAI 金鑰可以用嗎？**
+A: 可以，系統會自動回傳假資料，方便前端測試。
+
+**Q: 免費 OpenAI 帳號可以用嗎？**
+A: 需先綁定信用卡啟用免費額度，否則會出現 quota 錯誤。
+
+**Q: 如何切換 AI 模型？**
+A: 編輯 `server/routes.js` 內的 model 參數（如 `gpt-3.5-turbo`、`gpt-4`）。
+
+**Q: 如何保護金鑰安全？**
+A: 請勿將 `.env` 檔案提交到 git，並確保 `.gitignore` 已忽略。
 ## 📁 專案結構
 
 ```

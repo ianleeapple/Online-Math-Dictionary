@@ -145,3 +145,58 @@ router.delete('/classes/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+// AI 類題生成測試 API
+router.post('/ai/generate', async (req, res) => {
+  const { template, type, variations, difficulty, options_template, constraints } = req.body;
+  const count = variations || 3;
+  const apiKey = process.env.OPENAI_API_KEY;
+  // 若沒設金鑰則回傳假資料
+  if (!apiKey) {
+    const result = [];
+    for (let i = 0; i < count; i++) {
+      result.push({
+        question: `【AI生成】${template || '題目'}（變體${i + 1}）`,
+        answer: '42',
+        solution_steps: ['步驟一', '步驟二', '步驟三'],
+        difficulty: difficulty || 'medium',
+        choices: type === '單選題' || type === '多選題' ? ['A. 選項一', 'B. 選項二', 'C. 選項三', 'D. 選項四'] : []
+      });
+    }
+    return res.json({ generated: result });
+  }
+
+  // 串接 OpenAI
+  try {
+    const OpenAI = require('openai');
+    const openai = new OpenAI({ apiKey });
+
+    // 組合 prompt
+    let userPrompt = `原始題目：${template}\n題型：${type}\n難度：${difficulty}\n`;
+    if (options_template) userPrompt += `選項範例：\n${options_template}\n`;
+    if (constraints) userPrompt += `額外限制：\n${constraints}\n`;
+    userPrompt += `\n請根據以上題目生成${count}個類似但不同的題目，輸出為JSON格式：\n` +
+      `{"generated":[{"question":"題目內容","answer":"正確答案","solution_steps":["步驟1","步驟2"],"difficulty":"easy|medium|hard","choices":["A. ..."]}]}`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',   // 模型由此變更
+      messages: [
+        { role: 'system', content: '你是數學題目生成專家，根據用戶提供的原始題目，生成多個類似但不同的題目。每題需包含題目、答案、步驟、難度、選項（如適用），格式必須為 JSON。' },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000
+    });
+    // 嘗試解析回應
+    let responseText = completion.choices[0].message.content;
+    let jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/) ||
+                    responseText.match(/```([\s\S]*?)```/) ||
+                    [null, responseText];
+    const jsonContent = jsonMatch[1] || responseText;
+    const result = JSON.parse(jsonContent);
+    res.json(result);
+  } catch (error) {
+    console.error('AI 生成失敗:', error);
+    res.status(500).json({ error: 'AI 生成失敗', details: error.message });
+  }
+});

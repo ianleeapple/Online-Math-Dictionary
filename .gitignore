@@ -31,6 +31,15 @@ dist-ssr
 coverage
 .nyc_output
 
+# AI/LLM 相關暫存與依賴
+openai.log
+ai_output/
+__pycache__/
+*.ai.json
+
+# VS Code Copilot/AI
+.copilot/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
