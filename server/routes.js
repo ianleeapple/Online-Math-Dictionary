@@ -179,11 +179,11 @@ router.post('/ai/generate', async (req, res) => {
       `{"generated":[{"question":"題目內容","answer":"正確答案","solution_steps":["步驟1","步驟2"],"difficulty":"easy|medium|hard","choices":["A. ..."]}]}`;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',   // 模型由此變更
-      messages: [
-        { role: 'system', content: '你是數學題目生成專家，根據用戶提供的原始題目，生成多個類似但不同的題目。每題需包含題目、答案、步驟、難度、選項（如適用），格式必須為 JSON。' },
-        { role: 'user', content: userPrompt }
-      ],
+  model: 'gpt-3.5-turbo',   // 模型由此變更
+  messages: [
+    { role: 'system', content: '你是資深數學命題專家，請根據用戶提供的原始題目，生成多個「結構、敘述、解法邏輯皆有變化」的類似題目。請避免僅改變數字或名稱，應嘗試變換題目敘述方式、條件、數學概念或題型（如選填、應用、推理、圖形等）、增加或減少步驟、引入多步推理、隱含條件或設計陷阱，讓每題的解題過程有明顯不同並附上詳細解題步驟。若為選擇題，選項需具迷惑性且非僅數字變化。請以 JSON 格式輸出，範例：{"generated":[{"question":"題目內容","answer":"正確答案","solution_steps":["步驟1","步驟2"],"difficulty":"easy|medium|hard","choices":["A. ..."]}]}' },
+    { role: 'user', content: userPrompt }
+  ],
       temperature: 0.7,
       max_tokens: 2000
     });
