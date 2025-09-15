@@ -146,6 +146,8 @@ router.delete('/classes/:id', async (req, res) => {
 
 module.exports = router;
 
+const aiConfig = require('./aiConfig');
+
 // AI 類題生成測試 API
 router.post('/ai/generate', async (req, res) => {
   const { template, type, variations, difficulty, options_template, constraints } = req.body;
@@ -158,9 +160,11 @@ router.post('/ai/generate', async (req, res) => {
       result.push({
         question: `【AI生成】${template || '題目'}（變體${i + 1}）`,
         answer: '42',
-        solution_steps: ['步驟一', '步驟二', '步驟三'],
+        analysis: '此為假資料，因未設定 API 金鑰。',
+        solution_concept: ['1. 確認金鑰'],
+        detailed_steps: ['2. 於 .env 檔案中設定 OPENAI_API_KEY'],
         difficulty: difficulty || 'medium',
-        choices: type === '單選題' || type === '多選題' ? ['A. 選項一', 'B. 選項二', 'C. 選項三', 'D. 選項四'] : []
+        choices: type === '單選題' || type === '多選題' ? ['A. 選項一', 'B. 選項二', 'C. 選項三', 'D. 選項四'] : null
       });
     }
     return res.json({ generated: result });
@@ -171,32 +175,35 @@ router.post('/ai/generate', async (req, res) => {
     const OpenAI = require('openai');
     const openai = new OpenAI({ apiKey });
 
-    // 組合 prompt
-    let userPrompt = `原始題目：${template}\n題型：${type}\n難度：${difficulty}\n`;
-    if (options_template) userPrompt += `選項範例：\n${options_template}\n`;
-    if (constraints) userPrompt += `額外限制：\n${constraints}\n`;
-    userPrompt += `\n請根據以上題目生成${count}個類似但不同的題目，輸出為JSON格式：\n` +
-      `{"generated":[{"question":"題目內容","answer":"正確答案","solution_steps":["步驟1","步驟2"],"difficulty":"easy|medium|hard","choices":["A. ..."]}]}`;
-
-    const completion = await openai.chat.completions.create({
-  model: 'gpt-3.5-turbo',   // 模型由此變更
-  messages: [
-    { role: 'system', content: '你是資深數學命題專家，請根據用戶提供的原始題目，生成多個「結構、敘述、解法邏輯皆有變化」的類似題目。請避免僅改變數字或名稱，應嘗試變換題目敘述方式、條件、數學概念或題型（如選填、應用、推理、圖形等）、增加或減少步驟、引入多步推理、隱含條件或設計陷阱，讓每題的解題過程有明顯不同並附上詳細解題步驟。若為選擇題，選項需具迷惑性且非僅數字變化。請以 JSON 格式輸出，範例：{"generated":[{"question":"題目內容","answer":"正確答案","solution_steps":["步驟1","步驟2"],"difficulty":"easy|medium|hard","choices":["A. ..."]}]}' },
-    { role: 'user', content: userPrompt }
-  ],
-      temperature: 0.7,
-      max_tokens: 2000
+    // --- 1. 從設定檔取得參數 ---
+    const modelName = aiConfig.modelOverride || aiConfig.models[difficulty] || aiConfig.models.medium;
+    const { systemPrompt, userPrompt } = aiConfig.getPrompts({
+      template,
+      type,
+      variations: count,
+      difficulty,
+      options_template,
+      constraints
     });
+
+    // --- 2. 呼叫 API ---
+    const completion = await openai.chat.completions.create({
+      model: modelName,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: aiConfig.temperature,
+      max_tokens: aiConfig.maxTokens
+    });
+    
     // 嘗試解析回應
     let responseText = completion.choices[0].message.content;
-    let jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/) ||
-                    responseText.match(/```([\s\S]*?)```/) ||
-                    [null, responseText];
-    const jsonContent = jsonMatch[1] || responseText;
-    const result = JSON.parse(jsonContent);
+    const result = JSON.parse(responseText);
     res.json(result);
   } catch (error) {
     console.error('AI 生成失敗:', error);
-    res.status(500).json({ error: 'AI 生成失敗', details: error.message });
+    // ... (error handling)
   }
 });
