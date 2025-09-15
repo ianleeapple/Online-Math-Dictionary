@@ -75,13 +75,22 @@
             </p>
             <div v-if="showSolutionMap[index]" class="solution">
               <p><strong>答案：</strong>{{ question.answer }}</p>
-              <div v-if="question.solution_steps && question.solution_steps.length > 0">
-                <p><strong>解題步驟：</strong></p>
+              <div v-if="question.solution_concept && question.solution_concept.length > 0">
+                <p><strong>解題概念：</strong></p>
                 <ol class="steps-list">
-                  <li v-for="(step, sIdx) in question.solution_steps" :key="sIdx">{{ step }}</li>
+                  <li v-for="(step, sIdx) in question.solution_concept" :key="sIdx">{{ step }}</li>
+                </ol>
+              </div>
+              <div v-if="question.detailed_steps && question.detailed_steps.length > 0">
+                <p><strong>詳細步驟：</strong></p>
+                <ol class="steps-list">
+                  <li v-for="(step, sIdx) in question.detailed_steps" :key="sIdx">{{ step }}</li>
                 </ol>
               </div>
             </div>
+          </div>
+          <div v-if="question.analysis" class="analysis-container">
+            <p><strong>核心概念解析：</strong>{{ question.analysis }}</p>
           </div>
         </div>
       </div>
@@ -181,4 +190,5 @@ textarea { resize: vertical; }
 .solution-toggle:hover { text-decoration: underline; }
 .solution { background-color: #f9f9f9; padding: 10px; margin-top: 10px; border-radius: 4px; border-left: 3px solid #2a6ab3; }
 .steps-list { margin-top: 5px; padding-left: 20px; }
+.analysis-container { margin-top: 10px; padding: 10px; background-color: #f0f8ff; border-left: 3px solid #2a6ab3; border-radius: 4px; }
 </style>
