@@ -10,7 +10,7 @@ const aiConfig = {
   // 例如：AI_MODEL_OVERRIDE=gpt-4-turbo
   modelOverride: process.env.AI_MODEL_OVERRIDE || null,
 
-  // 根據難度選擇的預設模型
+  // 根據難度選擇的預設模型(暫定，可刪除)
   models: {
     easy: process.env.AI_MODEL_EASY || 'gpt-3.5-turbo',
     medium: process.env.AI_MODEL_MEDIUM || 'gpt-4o',
