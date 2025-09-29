@@ -1,55 +1,147 @@
 # 線上數學題庫系統 (Online Math Dictionary)
 
-本專案為一個全端開發的線上數學題庫系統，旨在提供一個包含使用者管理、班級管理、線上測驗與成績紀錄的安全平台。
+進階版數學題庫系統，前端採用 Vue 3 (Vite)，後端為 Express API，資料庫為 MySQL。支援 AI 生成題目、語音合成和數學解題影片生成。
 
 ## ✨ 主要功能
 
-*   **安全使用者系統**：區分「學生」與「老師」兩種角色，具備註冊與登入功能，採用 bcrypt 密碼雜湊加密
-*   **班級管理**：老師可以建立班級並取得加入代碼；學生可以憑代碼加入班級
-*   **線上測驗**：使用者可以建立測驗、進行作答並查詢歷史測驗紀錄
-*   **成就系統**：根據使用者的活動給予相對應的成就
-*   **個人檔案**：完整的個人資料展示，包含學習成就統計
-*   **表單驗證**：所有表單都具備完整的輸入驗證機制
+- 📚 **數學題庫管理**: 題目建立、編輯、分類
+- 🤖 **AI 智能生成**: 使用 OpenAI GPT 生成相關題目
+- 🎤 **語音合成**: OpenAI TTS 中文語音生成
+- 🎥 **影片生成**: Remotion 數學解題影片自動生成
+- 📈 **數據分析**: 使用者答題統計和分析
+- 👥 **用戶管理**: 學生/教師角色分離
+- 🛡️ **安全認證**: JWT + bcrypt 加密
+- 🏆 **成就系統**: 學習進度追蹤和獎勵
 
-## 🛠️ 技術棧
+## 🛠️ 技術架構
 
-*   **前端 (Frontend)**: Vue 3 (Composition API), Vue Router, Vite
-*   **後端 (Backend)**: Node.js, Express.js
-*   **資料庫 (Database)**: MySQL
-*   **安全性 (Security)**: bcrypt 密碼雜湊, JWT (準備中)
-*   **開發工具**: Vite 開發伺服器, 熱重載
+### 前端
+- **Vue 3**: 核心框架
+- **Vite**: 建置工具
+- **Vue Router**: 路由管理
+- **Axios**: HTTP 請求
 
-*   **AI 類題生成功能**：支援 OpenAI GPT 類模型自動產生數學題目，並可於 `/ai-test` 頁面測試與管理
-*   **API 金鑰管理**：AI 服務金鑰透過 `.env` 設定，預設支援 OpenAI
+### 後端
+- **Node.js + Express**: 伺服器框架
+- **MySQL**: 主資料庫
+- **JWT + bcrypt**: 認證加密
 
-## 🔒 安全特性
+### AI 相關
+- **OpenAI GPT-4**: 智能題目生成
+- **OpenAI TTS**: 語音合成
+- **Remotion**: React 影片渲染
+- **KaTeX**: 數學公式渲染
 
-*   **密碼安全**：使用 bcrypt 進行密碼雜湊處理 (Salt rounds: 12)
-*   **環境變數**：敏感資訊透過 `.env` 檔案管理
-*   **表單驗證**：前端與後端雙重驗證機制
-*   **JWT 支援**：為未來的 Token 認證做好準備
+### 開發工具
+- **Remotion Studio**: 影片可視化編輯器
+- **Chrome Headless**: 影片渲染引擎
 
----
+## � 開發環境安裝
 
-## 🚀 專案啟動指南
+### 1. 安裝依賴
 
-### AI 類題生成功能快速啟用
+**前端依賴**:
+```bash
+npm install
+```
 
-1.  進入 `server` 目錄安裝 openai 依賴：
-    ```bash
-    cd server
-    npm install openai
-    ```
-2.  於 `server/.env` 加入你的 OpenAI API 金鑰：
-    ```env
-    # AI 金鑰設定
-    OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    ```
-3.  啟動後端伺服器，前端進入 `/ai-test` 頁面即可測試 AI 類題自動生成。
+**後端依賴**:
+```bash
+cd server
+npm install
+```
 
-> 若無金鑰或額度，系統會自動 fallback 回傳假資料，方便前端測試。
+**影片生成依賴** (可選):
+```bash
+cd server/video
+npm install
+```
 
-請遵循以下步驟來在本機環境設定並執行此專案。
+### 2. 環境設定
+
+複製環境設定檔：
+```bash
+cd server
+cp .env.example .env
+```
+
+編輯 `.env` 檔案，設定以下項目：
+```env
+# 資料庫連線
+DB_HOST=localhost
+DB_USER=your_username
+DB_PASSWORD=your_password
+DB_NAME=math_platform
+
+# AI 功能 (可選)
+OPENAI_API_KEY=your_openai_api_key
+```
+
+### 3. 啟動服務
+
+**前端** (Vue + Vite):
+```bash
+npm run dev
+```
+
+**後端** (Express):
+```bash
+cd server
+node index.js
+```
+
+**Remotion Studio** (可選 - 影片編輯器):
+```bash
+cd server/video
+npm run studio
+```
+
+## 🎥 AI 影片生成功能
+
+### 技術架構
+- **Remotion**: React 組件式影片渲染
+- **KaTeX**: 數學公式渲染
+- **OpenAI TTS**: 中文語音合成
+- **Chrome Headless**: 影片渲染引擎
+
+### 支援的影片樣式
+- **簡潔風格**: 白背景 + 清晰文字
+- **白板風格**: 教學白板效果
+- **動畫風格**: 漸層背景 + 動畫效果
+
+### 影片特色
+- 🎨 **多場景教學**: 題目 → 分析 → 概念 → 步驟 → 答案
+- 📝 **數學公式**: 完整支援 LaTeX 語法
+- ✨ **動畫效果**: 打字機、淡入淡出、縮放
+- 🔊 **語音旁白**: AI 生成的中文語音
+
+### API 端點
+```http
+# 生成影片
+POST /api/video/generate
+{
+  "question": "數學題目內容",
+  "script": {影片腦本},
+  "style": "simple|whiteboard|animated",
+  "options": {其他選項}
+}
+
+# 取得影片檔案
+GET /api/video/file/:videoId
+
+# 生成語音
+POST /api/tts/generate
+{
+  "text": "要轉換的文字",
+  "voice": "nova|alloy|echo|fable|onyx|shimmer"
+}
+```
+
+### 成本評估
+- **影片渲染**: 完全免費 (本地端 Remotion)
+- **語音合成**: ~$0.003-0.008 USD/次
+- **AI 腦本**: ~$0.003-0.006 USD/次
+- **總成本**: 約 $0.006-0.014 USD/部 (台幣 0.2-0.4元)
 
 ### 1. 環境準備
 
@@ -257,58 +349,66 @@ Online-Math-Dictionary/
 *   建立班級並取得加入代碼
 *   管理班級成員
 
-## 🔧 開發相關
+## � 資料庫架構
 
-### 開發指令
-```bash
-# 安裝依賴
-npm install
+主要表格：
+- `users`: 使用者資料 (學生/教師)
+- `questions`: 題目資料 (支援 LaTeX)
+- `quiz_sessions`: 測驗工作階段
+- `quiz_responses`: 使用者答題記錄
+- `ai_generated_content`: AI 生成內容緩存
+- `video_cache`: 影片生成緩存
 
-# 啟動開發伺服器
-npm run dev
+## 🚀 未來規劃
 
-# 建置生產版本
-npm run build
+### 短期目標
+- [ ] 影片緩存機制
+- [ ] 批量影片生成
+- [ ] 更多影片樣式模板
+- [ ] 手寫識別輸入
 
-# 預覽生產版本
-npm run preview
-```
+### 中期目標
+- [ ] Remotion Studio 完整整合
+- [ ] 影片直播功能
+- [ ] 多語言支援
+- [ ] 行動版 APP
 
-### 資料庫管理
-```bash
-# 重建資料庫
-mysql -u root -p < server/schema.sql
-
-# 備份資料庫
-mysqldump -u root -p math_platform > backup.sql
-```
+### 長期目標
+- [ ] VR/AR 數學教學
+- [ ] 智能答疑機器人
+- [ ] 個人化學習路徑
 
 ## 🛡️ 安全性注意事項
 
-*   **密碼安全**：系統使用 bcrypt 進行密碼雜湊，不會儲存明文密碼
-*   **環境變數**：敏感資訊請勿提交至版本控制，確保 `.env` 檔案在 `.gitignore` 中
-*   **JWT Secret**：請使用強密碼作為 JWT_SECRET，並定期更換
-*   **資料庫權限**：生產環境請限制資料庫使用者權限
+- **密碼安全**: 使用 bcrypt 進行密碼雜湊，不儲存明文密碼
+- **環境變數**: 敏感資訊透過 `.env` 管理，勿提交至版本控制
+- **API 金鑰**: OpenAI API 金鑰請妥善保管，注意使用額度
+- **資料庫權限**: 生產環境請限制資料庫使用者權限
 
 ## 🐛 常見問題
 
+### Q: 影片生成失敗
+**A:** 請檢查：
+1. Remotion 依賴是否正確安裝
+2. Chrome Headless 是否正常下載
+3. 系統記憶體是否足夠 (建議 8GB+)
+
+### Q: 語音生成無聲音
+**A:** 請確認：
+1. OpenAI API 金鑰是否有效
+2. TTS API 額度是否充足
+3. 瀏覽器是否允許自動播放
+
 ### Q: 無法連線到資料庫
 **A:** 請檢查：
-1.  MySQL 服務是否正常啟動
-2.  `.env` 檔案中的資料庫連線資訊是否正確
-3.  資料庫是否已建立 (`math_platform`)
+1. MySQL 服務是否正常啟動
+2. `.env` 檔案中的資料庫連線資訊是否正確
+3. 資料庫是否已建立 (`math_platform`)
 
-### Q: 登入後個人資料顯示「未填寫」
-**A:** 請確認：
-1.  註冊時是否完整填寫個人資料
-2.  瀏覽器 localStorage 是否正常運作
-3.  後端 API 是否正常回傳使用者資料
+## 📝 責任聲明
 
-### Q: 無法建立測驗
-**A:** 請檢查：
-1.  所有必填欄位是否已填寫
-2.  網路連線是否正常
-3.  後端伺服器是否正常運行
+本專案使用 OpenAI API 提供 AI 功能，請確保遵守 OpenAI 使用條款。
+影片生成功能僅供教育目的使用，請勿用於商業用途。
 
 ## 📄 授權條款
 
@@ -320,4 +420,4 @@ mysqldump -u root -p math_platform > backup.sql
 
 ---
 
-*最後更新：2025年9月16日*
+*最後更新：2025年9月30日*
