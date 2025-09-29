@@ -9,7 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@remotion/cli": "^4.0.355",
+    "@remotion/renderer": "^4.0.355",
     "bcrypt": "^6.0.0",
+    "katex": "^0.16.22",
+    "react-katex": "^3.1.0",
+    "remotion": "^4.0.355",
     "vue": "^3.5.17",
     "vue-router": "^4.5.1"
   },
