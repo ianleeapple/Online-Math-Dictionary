@@ -40,6 +40,42 @@ __pycache__/
 # VS Code Copilot/AI
 .copilot/
 
+# 影片生成相關
+server/output/
+server/temp/
+server/video/node_modules/
+server/video/dist/
+server/video/.remotion/
+*.mp4
+*.webm
+*.mov
+*.avi
+
+# Remotion 暫存
+out/
+build/
+.remotion/
+tmp-*
+temp-*
+
+# 影片生成相關
+server/output/
+server/temp/
+server/video/node_modules/
+server/video/dist/
+server/video/.remotion/
+*.mp4
+*.webm
+*.mov
+*.avi
+
+# Remotion 暫存
+out/
+build/
+.remotion/
+tmp-*
+temp-*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
