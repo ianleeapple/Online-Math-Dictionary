@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 const { hashPassword, verifyPassword } = require('./auth');
+const path = require('path');
+const fs = require('fs');
 
 // 取得所有使用者
 router.get('/users', async (req, res) => {
@@ -144,6 +146,141 @@ router.delete('/classes/:id', async (req, res) => {
   }
 });
 
+// ========================================================
+// 影片生成 API (實驗功能)
+// ========================================================
+router.post('/video/generate', async (req, res) => {
+  console.log('影片生成 API 被呼叫，請求內容:', req.body);
+  
+  try {
+    const { question, script, audioUrl, style = 'simple', options = {} } = req.body;
+    
+    if (!question || !script) {
+      return res.status(400).json({ error: 'Question and script are required.' });
+    }
+    
+    console.log('開始生成影片...');
+    console.log('影片樣式:', style);
+    console.log('場景數量:', script.scenes.length);
+    
+    // 使用 VideoGenerator 生成真實影片
+    const videoGenerator = new VideoGenerator();
+    const videoResult = await videoGenerator.generateMathVideo(question, script, style, options);
+    
+    res.status(200).json({
+      success: true,
+      videoUrl: videoResult.videoUrl,
+      videoId: videoResult.videoId,
+      duration: videoResult.duration,
+      size: videoResult.size,
+      message: '影片生成完成'
+    });
+    
+  } catch (error) {
+    console.error('影片生成錯誤:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate video', 
+      details: error.message 
+    });
+  }
+});
+
+// 引入影片生成器
+const VideoGenerator = require('./video/VideoGenerator');
+
+// 提供影片檔案的靜態服務
+router.get('/video/file/:videoId', (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const videoPath = path.join(__dirname, 'output', 'videos', `${videoId}.mp4`);
+    
+    // 檢查檔案是否存在
+    if (!fs.existsSync(videoPath)) {
+      return res.status(404).json({ error: '影片檔案不存在' });
+    }
+    
+    // 設置正確的 MIME 類型
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `inline; filename="${videoId}.mp4"`);
+    
+    // 支援範圍請求 (用於影片播放)
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+    
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+      const file = fs.createReadStream(videoPath, { start, end });
+      const head = {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'video/mp4',
+      };
+      res.writeHead(206, head);
+      file.pipe(res);
+    } else {
+      const head = {
+        'Content-Length': fileSize,
+        'Content-Type': 'video/mp4',
+      };
+      res.writeHead(200, head);
+      fs.createReadStream(videoPath).pipe(res);
+    }
+  } catch (error) {
+    console.error('提供影片檔案時發生錯誤:', error);
+    res.status(500).json({ error: '無法提供影片檔案' });
+  }
+});
+
+// 提供影片檔案服務
+router.get('/video/:videoId', (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const videoPath = path.join(__dirname, 'video', 'output', `${videoId}.mp4`);
+    
+    // 檢查檔案是否存在
+    if (!fs.existsSync(videoPath)) {
+      return res.status(404).json({ error: '影片檔案不存在' });
+    }
+    
+    // 設定適當的 headers
+    const stat = fs.statSync(videoPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+    
+    if (range) {
+      // 支援部分內容請求 (用於視頻播放)
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+      const file = fs.createReadStream(videoPath, { start, end });
+      const head = {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'video/mp4',
+      };
+      res.writeHead(206, head);
+      file.pipe(res);
+    } else {
+      const head = {
+        'Content-Length': fileSize,
+        'Content-Type': 'video/mp4',
+      };
+      res.writeHead(200, head);
+      fs.createReadStream(videoPath).pipe(res);
+    }
+  } catch (error) {
+    console.error('影片服務錯誤:', error);
+    res.status(500).json({ error: '影片服務失敗' });
+  }
+});
+
 module.exports = router;
 
 const aiConfig = require('./aiConfig');
@@ -204,6 +341,72 @@ router.post('/ai/generate', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('AI 生成失敗:', error);
-    // ... (error handling)
+    res.status(500).json({ message: 'AI 生成失敗', error: error.message });
+  }
+});
+
+// ========================================================
+// TTS 文字轉語音 API
+// ========================================================
+router.post('/tts/generate', async (req, res) => {
+  console.log('TTS API 被呼叫，請求內容:', req.body);
+  
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error('OpenAI API key 未設定');
+    return res.status(500).json({ error: 'OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file.' });
+  }
+
+  try {
+    const { text, voice = 'alloy' } = req.body;
+
+    if (!text || text.trim() === '') {
+      console.error('文字參數缺失或為空');
+      return res.status(400).json({ error: 'Parameter "text" is required and cannot be empty.' });
+    }
+
+    console.log('開始生成語音，文字:', text.substring(0, 50) + '...', '語音:', voice);
+
+    const OpenAI = require('openai');
+    const openai = new OpenAI({ apiKey });
+
+    // 呼叫 OpenAI 的語音生成 API
+    const mp3 = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: voice,
+      input: text,
+    });
+
+    console.log('語音生成成功，準備傳送音訊檔');
+
+    // 設定回應標頭，告訴瀏覽器這是一個 MP3 音訊檔
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', 'inline; filename="speech.mp3"');
+    
+    // 將 OpenAI 的回應轉換為 Buffer 並傳送
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    console.log('音訊檔案大小:', buffer.length, 'bytes');
+    
+    if (buffer.length === 0) {
+      throw new Error('收到空的音訊檔案');
+    }
+    
+    res.send(buffer);
+    console.log('音訊檔案已成功傳送給前端');
+
+  } catch (error) {
+    console.error('TTS Generation Error:', error);
+    
+    // 更詳細的錯誤處理
+    if (error.code === 'insufficient_quota') {
+      return res.status(429).json({ error: 'OpenAI API quota exceeded. Please check your billing.' });
+    } else if (error.code === 'invalid_api_key') {
+      return res.status(401).json({ error: 'Invalid OpenAI API key.' });
+    } else {
+      return res.status(500).json({ 
+        error: 'Failed to generate audio', 
+        details: error.message || 'Unknown error'
+      });
+    }
   }
 });
