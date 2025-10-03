@@ -6,23 +6,17 @@ require('dotenv').config();
  */
 const aiConfig = {
   // --- 模型設定 ---
-  // 可在 .env 中設定 AI_MODEL_OVERRIDE 來強制使用特定模型，忽略難度選擇。
-  // 例如：AI_MODEL_OVERRIDE=gpt-4-turbo
-  modelOverride: process.env.AI_MODEL_OVERRIDE || null,
-
-  // 根據難度選擇的預設模型(暫定，可刪除)
-  models: {
-    easy: process.env.AI_MODEL_EASY || 'gpt-3.5-turbo',
-    medium: process.env.AI_MODEL_MEDIUM || 'gpt-4o',
-    hard: process.env.AI_MODEL_HARD || 'gpt-4o',
-  },
+  // Google Gemini 模型選擇
+  // 可選模型：https://ai.google.dev/gemini-api/docs/models?hl=zh-tw
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-pro',
 
   // --- API 參數設定 ---
   // 溫度 (0.0 - 2.0)，越高回答越有創意，越低越穩定。數學建議 0.5 - 1.0。
-  temperature: parseFloat(process.env.AI_TEMPERATURE) || 0.8,
+  temperature: parseFloat(process.env.AI_TEMPERATURE) || 0.7,
 
   // 最大 Token 上限，用來控制單次呼叫的最高成本。
-  maxTokens: parseInt(process.env.AI_MAX_TOKENS) || 2000,
+  // 設為 null 或 undefined = 無上限（使用模型預設最大值）
+  maxTokens: process.env.AI_MAX_TOKENS ? parseInt(process.env.AI_MAX_TOKENS) : null,
 
   // --- Prompt 範本 ---
   // 將 System Prompt 和 User Prompt 的生成邏輯整合在一起

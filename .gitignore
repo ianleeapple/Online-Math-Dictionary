@@ -1,88 +1,71 @@
-# Logs
-logs
+# ==================================
+# 依賴套件 (Dependencies)
+# ==================================
+# 專案的依賴套件，不需納入版控
+/node_modules/
+/server/node_modules/
+/server/video/node_modules/
+
+# ==================================
+# 環境變數與敏感資訊 (Secrets)
+# ==================================
+# 包含 API 金鑰、資料庫密碼等，絕對不能上傳！
+.env
+.env.*
+server/.env
+server/.env.*
+
+# 只允許 .env.example 範本檔案被追蹤
+!/.env.example
+!/server/.env.example
+
+# ==================================
+# 建置輸出 (Build Output)
+# ==================================
+# Vite 的建置輸出目錄
+/dist/
+/dist-ssr/
+
+# ==================================
+# 快取與暫存 (Cache & Temp)
+# ==================================
+# Vite 快取
+.vite/
+
+# Remotion 影片渲染暫存
+.remotion/
+/server/video/.remotion/
+
+# 影片與 AI 生成的輸出/暫存目錄
+/server/output/
+/server/temp/
+
+# ==================================
+# 日誌檔案 (Logs)
+# ==================================
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-# Dependency directories
-# This will ignore node_modules in the root and in /server
-node_modules/
-
-# Vite build output
-dist
-dist-ssr
-
-# Vite cache
-.vite/
-
-# Environment variables
-# Never commit secrets!
-.env
-.env.*
-!.env.example
-
-# Local files
-*.local
-
-# Test reports
-coverage
-.nyc_output
-
-# AI/LLM 相關暫存與依賴
-openai.log
-ai_output/
-__pycache__/
-*.ai.json
-
-# VS Code Copilot/AI
-.copilot/
-
-# 影片生成相關
-server/output/
-server/temp/
-server/video/node_modules/
-server/video/dist/
-server/video/.remotion/
-*.mp4
-*.webm
-*.mov
-*.avi
-
-# Remotion 暫存
-out/
-build/
-.remotion/
-tmp-*
-temp-*
-
-# 影片生成相關
-server/output/
-server/temp/
-server/video/node_modules/
-server/video/dist/
-server/video/.remotion/
-*.mp4
-*.webm
-*.mov
-*.avi
-
-# Remotion 暫存
-out/
-build/
-.remotion/
-tmp-*
-temp-*
-
-# Editor directories and files
+# ==================================
+# 編輯器設定 (Editor-specific)
+# ==================================
+# VS Code 的工作區設定，但保留共享的設定檔
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/launch.json
+
+# ==================================
+# AI/影片生成檔案 (Generated Media)
+# ==================================
+# 避免將大型媒體檔案加入版控
+*.mp4
+*.webm
+*.mov
+*.avi
+*.mp3
+*.wav
+
