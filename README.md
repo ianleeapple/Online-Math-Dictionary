@@ -5,7 +5,7 @@
 ## ✨ 主要功能
 
 - 📚 **數學題庫管理**: 題目建立、編輯、分類
-- 🤖 **AI 智能生成**: 使用 OpenAI GPT 生成相關題目
+- 🤖 **AI 智能生成**: 使用 Google Gemini 2.5 Pro 生成高品質數學題目
 - 🎤 **語音合成**: OpenAI TTS 中文語音生成
 - 🎥 **影片生成**: Remotion 數學解題影片自動生成
 - 📈 **數據分析**: 使用者答題統計和分析
@@ -16,25 +16,26 @@
 ## 🛠️ 技術架構
 
 ### 前端
-- **Vue 3**: 核心框架
-- **Vite**: 建置工具
-- **Vue Router**: 路由管理
+- **Vue 3**: 核心框架 (Composition API)
+- **Vite**: 快速建置工具
+- **Vue Router**: SPA 路由管理
 - **Axios**: HTTP 請求
 
 ### 後端
 - **Node.js + Express**: 伺服器框架
 - **MySQL**: 主資料庫
-- **JWT + bcrypt**: 認證加密
+- **bcrypt**: 密碼雜湊加密
 
 ### AI 相關
-- **OpenAI GPT-4**: 智能題目生成
+- **Google Gemini 2.5 Pro**: AI 智能題目生成 (支援 Early Access)
 - **OpenAI TTS**: 語音合成
-- **Remotion**: React 影片渲染
+- **Remotion**: React 影片渲染引擎
 - **KaTeX**: 數學公式渲染
 
 ### 開發工具
 - **Remotion Studio**: 影片可視化編輯器
 - **Chrome Headless**: 影片渲染引擎
+- **VS Code**: 推薦開發環境
 
 ## � 開發環境安裝
 
@@ -69,13 +70,28 @@ cp .env.example .env
 ```env
 # 資料庫連線
 DB_HOST=localhost
-DB_USER=your_username
+DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=math_platform
 
-# AI 功能 (可選)
-OPENAI_API_KEY=your_openai_api_key
+# 密碼安全設定
+BCRYPT_SALT_ROUNDS=12
+
+# AI 功能 (Google Gemini - 必填)
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-pro
+
+# AI 生成參數 (可選)
+AI_TEMPERATURE=0.7
+# AI_MAX_TOKENS=8192  # 註解掉此行即為無上限
+
+# OpenAI TTS (語音合成 - 可選)
+OPENAI_API_KEY=your_openai_api_key_here
 ```
+
+**取得 API Key：**
+- Google Gemini API: https://makersuite.google.com/app/apikey (免費額度)
+- OpenAI API: https://platform.openai.com/api-keys (TTS 語音功能)
 
 ### 3. 啟動服務
 
@@ -224,83 +240,109 @@ POST /api/tts/generate
 
 ## 🤖 AI 類題生成功能說明
 
-本專案的 AI 類題生成功能經過精心設計，旨在提供高品質、具教育意義且易於管理的題目生成體驗。
+本專案採用 **Google Gemini 2.5 Pro** 作為 AI 引擎，提供高品質、具教育意義的數學題目生成功能。
 
 ### 核心架構
 
-*   **集中化設定 (`server/aiConfig.js`)**: 所有與 AI 相關的設定，包括 Prompt 範本、模型選擇邏輯、API 參數（如溫度）等，都集中在此檔案中，方便統一管理與維護。
-*   **環境變數覆蓋 (`.env`)**: 您可以透過在 `.env` 檔案中設定特定變數，來覆蓋 `aiConfig.js` 中的預設值，實現快速測試與部署切換，無需修改任何程式碼。
-*   **智慧模型選擇**: 系統會根據您選擇的題目難度（簡單、中等、困難），自動切換使用不同的 OpenAI 模型（例如 `gpt-3.5-turbo` 或 `gpt-4o`），在確保高品質輸出的同時，有效節省 API 成本。
+*   **集中化設定 (`server/aiConfig.js`)**: 所有與 AI 相關的設定，包括 Prompt 範本、模型選擇、API 參數（溫度、Token 限制）等，都集中在此檔案中，方便統一管理。
+*   **環境變數覆蓋 (`.env`)**: 您可以透過 `.env` 檔案調整 AI 行為，無需修改程式碼。
+*   **Gemini 2.5 Pro 優勢**: 
+  - 支援 **8,192 tokens** 輸出 (無上限模式)
+  - 更強的數學推理能力
+  - 免費額度充足 (每分鐘 2 次請求)
+  - Early Access 模型支援
 
 ### 如何客製化 AI 行為
 
-您可以透過編輯 `server/.env` 檔案來輕鬆調整 AI 的行為：
+透過編輯 `server/.env` 檔案來調整 AI：
 
-1.  **強制使用特定模型**:
-    如果您想讓所有難度的題目都使用特定模型（例如 `gpt-4-turbo`）進行測試，只需加入：
+1.  **選擇 Gemini 模型**:
     ```env
-    AI_MODEL_OVERRIDE=gpt-4-turbo
+    GEMINI_MODEL=gemini-2.5-pro          # 推薦 (需 Early Access)
+    # GEMINI_MODEL=gemini-2.0-flash-exp  # 快速模型
+    # GEMINI_MODEL=gemini-1.5-pro        # 穩定版
     ```
 
-2.  **微調各難度的模型**:
-    您可以為不同難度分別指定模型：
+2.  **調整創意程度**:
     ```env
-    AI_MODEL_EASY=gpt-3.5-turbo
-    AI_MODEL_MEDIUM=gpt-4o
-    AI_MODEL_HARD=gpt-4-turbo
+    AI_TEMPERATURE=0.7  # 0.0-2.0，越高越有創意
     ```
 
-3.  **調整創意程度與長度**:
+3.  **設定 Token 限制**:
     ```env
-    AI_TEMPERATURE=0.9
-    AI_MAX_TOKENS=2500
+    # AI_MAX_TOKENS=8192     # 設定上限
+    # 註解掉此行 = 無上限（使用模型預設 8,192）
     ```
 
-### 強化的 Prompt 設計
+### Prompt 設計原則
 
-我們採用了高度結構化的 Prompt，以確保 AI 生成內容的品質與穩定性：
+*   **角色定位**: AI 扮演資深數學命題教授與教科書作者
+*   **核心要求**: 
+  - 避免純數字替換
+  - 概念延伸與變化
+  - 高迷惑性選項設計
+  - 嚴謹的解題步驟
+*   **JSON 結構**: 統一輸出格式，包含：
+  - `question`: 完整題目
+  - `analysis`: 核心概念解析
+  - `solution_concept`: 解題思路
+  - `detailed_steps`: 詳細計算步驟
+  - `choices`: 選項 (選擇題)
+  - `answer`: 正確答案
 
-*   **角色扮演**: 指令 AI 扮演資深的數學命題教授。
-*   **核心原則**: 明確要求 AI 避免純數字替換，並進行概念延伸與變化。
-*   **嚴格的 JSON 格式**: 強制 AI 輸出固定的 JSON 結構，並包含 `analysis`（核心概念解析）、`solution_concept`（解題概念）、`detailed_steps`（詳細計算步驟）等豐富欄位。
-*   **避免編號衝突**: Prompt 中明確指示 AI 在回傳步驟時不要自行加上數字編號，以避免與前端的列表樣式產生衝突。
+### 成本評估 (Google Gemini)
 
-這些設計確保了 AI 生成的題目不僅品質高，且格式穩定，易於後端解析與前端展示。
+- **免費額度**: 每分鐘 2 次請求，每天 50 次請求
+- **付費方案**: $0.075 / 1M input tokens, $0.30 / 1M output tokens
+- **單次生成成本**: 約 $0.002-0.004 USD (台幣 0.06-0.12 元)
+- **比 OpenAI 便宜**: 約為 GPT-4 的 1/10 成本
 ## 📁 專案結構
 
 ```
 Online-Math-Dictionary/
-├── public/                    # 靜態資源
-│   ├── student.png           # 學生角色圖示
-│   ├── teacher.png           # 老師角色圖示
-│   └── vite.svg             # Vite 標誌
-├── src/                      # 前端源碼
-│   ├── components/          # Vue 元件
-│   │   └── HelloWorld.vue   # 範例元件
-│   ├── views/               # 頁面元件
-│   │   ├── HomeView.vue     # 首頁
-│   │   ├── LoginView.vue    # 登入頁面
-│   │   ├── RegisterView.vue # 註冊頁面
-│   │   ├── ProfileView.vue  # 個人檔案
-│   │   ├── ClassGroupView.vue # 班級管理
-│   │   ├── QuizCreateView.vue # 測驗建立
-│   │   └── QuizRecordView.vue # 測驗紀錄
-│   ├── assets/              # 資源檔案
-│   ├── App.vue              # 主應用元件
-│   ├── main.js              # 應用程式進入點
-│   ├── router.js            # 路由設定
-│   └── style.css            # 全域樣式
-├── server/                   # 後端源碼
-│   ├── auth.js              # 密碼安全工具
-│   ├── db.js                # 資料庫連線設定
-│   ├── routes.js            # API 路由定義
-│   ├── index.js             # 伺服器進入點
-│   ├── schema.sql           # 資料庫結構
-│   └── .env                 # 環境變數 (需自行建立)
-├── .gitignore               # Git 忽略規則
-├── package.json             # 前端依賴管理
-├── vite.config.js           # Vite 設定
-└── README.md                # 專案說明
+├── public/                      # 靜態資源
+│   ├── student.png             # 學生角色圖示
+│   ├── teacher.png             # 老師角色圖示
+│   └── vite.svg                # Vite 標誌
+├── src/                        # 前端源碼
+│   ├── components/             # Vue 元件
+│   │   └── HelloWorld.vue      # 範例元件
+│   ├── views/                  # 頁面元件
+│   │   ├── HomeView.vue        # 首頁
+│   │   ├── LoginView.vue       # 登入頁面
+│   │   ├── RegisterView.vue    # 註冊頁面
+│   │   ├── ProfileView.vue     # 個人檔案
+│   │   ├── ClassGroupView.vue  # 班級管理
+│   │   ├── QuizCreateView.vue  # 測驗建立
+│   │   ├── QuizRecordView.vue  # 測驗紀錄
+│   │   └── AITestView.vue      # AI 生成測試頁面
+│   ├── assets/                 # 資源檔案
+│   ├── App.vue                 # 主應用元件
+│   ├── main.js                 # 應用程式進入點
+│   ├── router.js               # 路由設定
+│   └── style.css               # 全域樣式
+├── server/                     # 後端源碼
+│   ├── auth.js                 # 密碼安全工具 (bcrypt)
+│   ├── db.js                   # MySQL 連線池設定
+│   ├── routes.js               # API 路由定義
+│   ├── index.js                # Express 伺服器進入點
+│   ├── aiConfig.js             # AI 生成設定與 Prompt
+│   ├── schema.sql              # 資料庫結構定義
+│   ├── migrate-passwords.js    # 密碼遷移工具
+│   ├── .env                    # 環境變數 (需自行建立)
+│   ├── .env.example            # 環境變數範本
+│   ├── video/                  # 影片生成模組
+│   │   ├── VideoGenerator.js   # 影片生成器
+│   │   ├── components/         # Remotion 元件
+│   │   └── package.json        # Remotion 依賴
+│   ├── output/                 # 生成的影片輸出 (gitignore)
+│   └── temp/                   # 暫存檔案 (gitignore)
+├── .github/                    # GitHub 設定
+│   └── copilot-instructions.md # Copilot 客製指令
+├── .gitignore                  # Git 忽略規則
+├── package.json                # 前端依賴管理
+├── vite.config.js              # Vite 設定 (API Proxy)
+└── README.md                   # 專案說明文件
 ```
 
 ## 📝 API 端點
@@ -308,11 +350,11 @@ Online-Math-Dictionary/
 後端 API 統一以 `/api` 開頭，主要端點如下：
 
 ### 認證相關
-*   `POST /api/login`: 使用者登入
-*   `POST /api/register`: 使用者註冊
+*   `POST /api/login`: 使用者登入 (email + password + role)
+*   `POST /api/users`: 使用者註冊 (含密碼雜湊)
 
 ### 使用者管理
-*   `GET /api/users`: 取得所有使用者
+*   `GET /api/users`: 取得所有使用者 (不含密碼)
 *   `DELETE /api/users/:id`: 刪除指定使用者
 
 ### 測驗系統
@@ -326,6 +368,27 @@ Online-Math-Dictionary/
 
 ### 成就系統
 *   `GET /api/achievements`: 取得所有成就
+
+### AI 生成 (Google Gemini)
+*   `POST /api/ai/generate`: AI 類題生成
+  ```json
+  {
+    "template": "原始題目",
+    "type": "選擇題|填充題|計算題",
+    "variations": 3,
+    "difficulty": "easy|medium|hard",
+    "options_template": "選項範本",
+    "constraints": "特殊約束"
+  }
+  ```
+
+### 影片生成 (Remotion)
+*   `POST /api/video/generate`: 生成數學解題影片
+*   `GET /api/video/file/:videoId`: 取得影片檔案
+*   `GET /api/video/:videoId`: 影片串流服務
+
+### 語音合成 (OpenAI TTS)
+*   `POST /api/tts/generate`: 文字轉語音
 
 ## 🎯 使用說明
 
@@ -349,15 +412,19 @@ Online-Math-Dictionary/
 *   建立班級並取得加入代碼
 *   管理班級成員
 
-## � 資料庫架構
+## 🗄️ 資料庫架構
 
 主要表格：
-- `users`: 使用者資料 (學生/教師)
-- `questions`: 題目資料 (支援 LaTeX)
-- `quiz_sessions`: 測驗工作階段
-- `quiz_responses`: 使用者答題記錄
-- `ai_generated_content`: AI 生成內容緩存
-- `video_cache`: 影片生成緩存
+- `users`: 使用者資料 (學生/教師，含 bcrypt 密碼雜湊)
+- `classes`: 班級資料 (教師建立的班級)
+- `class_members`: 班級成員關聯表
+- `quiz`: 測驗記錄 (題型、難度、分數等)
+- `achievement`: 成就系統 (學習進度追蹤)
+
+資料庫初始化：
+```bash
+mysql -u root -p < server/schema.sql
+```
 
 ## 🚀 未來規劃
 
@@ -387,9 +454,16 @@ Online-Math-Dictionary/
 
 ## 🐛 常見問題
 
+### Q: AI 生成回傳空白或錯誤
+**A:** 請檢查：
+1. `GEMINI_API_KEY` 是否正確設定在 `.env`
+2. 是否有網路連線問題
+3. 檢查 `AI_MAX_TOKENS` 設定 (建議註解掉或設為 8192)
+4. 查看後端 Console 的詳細錯誤訊息
+
 ### Q: 影片生成失敗
 **A:** 請檢查：
-1. Remotion 依賴是否正確安裝
+1. Remotion 依賴是否正確安裝 (`cd server/video && npm install`)
 2. Chrome Headless 是否正常下載
 3. 系統記憶體是否足夠 (建議 8GB+)
 
@@ -397,18 +471,52 @@ Online-Math-Dictionary/
 **A:** 請確認：
 1. OpenAI API 金鑰是否有效
 2. TTS API 額度是否充足
-3. 瀏覽器是否允許自動播放
+3. 瀏覽器是否允許自動播放音訊
 
 ### Q: 無法連線到資料庫
 **A:** 請檢查：
 1. MySQL 服務是否正常啟動
-2. `.env` 檔案中的資料庫連線資訊是否正確
-3. 資料庫是否已建立 (`math_platform`)
+2. `.env` 檔案中的 `DB_*` 設定是否正確
+3. 資料庫 `math_platform` 是否已建立
+4. 使用者權限是否足夠
 
-## 📝 責任聲明
+### Q: 登入失敗 (密碼錯誤)
+**A:** 如果是舊資料庫遷移：
+1. 執行密碼遷移工具: `node server/migrate-passwords.js`
+2. 這會將明文密碼轉換為 bcrypt 雜湊
 
-本專案使用 OpenAI API 提供 AI 功能，請確保遵守 OpenAI 使用條款。
-影片生成功能僅供教育目的使用，請勿用於商業用途。
+## � 技術亮點
+
+### 1. **Google Gemini 整合**
+- 使用最新 `@google/generative-ai` SDK
+- 支援 Gemini 2.5 Pro (Early Access)
+- 智能 Token 管理 (無上限模式)
+- 詳細錯誤處理與除錯日誌
+
+### 2. **密碼安全**
+- bcrypt 雜湊演算法 (12 rounds)
+- 密碼遷移工具 (明文→雜湊)
+- 登入時密碼驗證
+- API 回應絕不包含密碼
+
+### 3. **影片渲染技術**
+- Remotion React 元件式渲染
+- KaTeX 數學公式支援
+- 多場景教學流程
+- 支援語音旁白整合
+
+### 4. **開發體驗**
+- VS Code Tasks 整合
+- API Proxy 自動轉發 (Vite)
+- 集中化 AI 設定檔
+- 詳細的錯誤訊息與日誌
+
+## �📝 責任聲明
+
+- 本專案使用 **Google Gemini API** 與 **OpenAI API**，請遵守各自的使用條款
+- 影片生成功能僅供教育目的使用
+- 請妥善保管 API 金鑰，避免外洩
+- 注意 API 使用額度，避免超額費用
 
 ## 📄 授權條款
 
@@ -418,6 +526,18 @@ Online-Math-Dictionary/
 
 歡迎提交 Issue 或 Pull Request 來改善此專案！
 
+### 開發建議
+- 使用 VS Code 作為開發環境
+- 安裝 Volar (Vue Language Features) 擴充功能
+- 啟用 ESLint 與 Prettier 進行程式碼格式化
+- 提交前請確保所有測試通過
+
+## 📞 聯絡資訊
+
+如有任何問題或建議，歡迎透過 GitHub Issues 聯繫。
+
 ---
 
-*最後更新：2025年9月30日*
+**專案狀態**: 🟢 持續開發中  
+**最後更新**: 2025年10月3日  
+**核心技術**: Vue 3 + Express + MySQL + Google Gemini 2.5 Pro

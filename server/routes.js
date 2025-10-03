@@ -284,12 +284,14 @@ router.get('/video/:videoId', (req, res) => {
 module.exports = router;
 
 const aiConfig = require('./aiConfig');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// AI 類題生成測試 API
+// AI 類題生成測試 API (使用 Google Gemini)
 router.post('/ai/generate', async (req, res) => {
   const { template, type, variations, difficulty, options_template, constraints } = req.body;
   const count = variations || 3;
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
+  
   // 若沒設金鑰則回傳假資料
   if (!apiKey) {
     const result = [];
@@ -299,7 +301,7 @@ router.post('/ai/generate', async (req, res) => {
         answer: '42',
         analysis: '此為假資料，因未設定 API 金鑰。',
         solution_concept: ['1. 確認金鑰'],
-        detailed_steps: ['2. 於 .env 檔案中設定 OPENAI_API_KEY'],
+        detailed_steps: ['2. 於 .env 檔案中設定 GEMINI_API_KEY'],
         difficulty: difficulty || 'medium',
         choices: type === '單選題' || type === '多選題' ? ['A. 選項一', 'B. 選項二', 'C. 選項三', 'D. 選項四'] : null
       });
@@ -307,13 +309,12 @@ router.post('/ai/generate', async (req, res) => {
     return res.json({ generated: result });
   }
 
-  // 串接 OpenAI
+  // 串接 Google Gemini
   try {
-    const OpenAI = require('openai');
-    const openai = new OpenAI({ apiKey });
-
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
     // --- 1. 從設定檔取得參數 ---
-    const modelName = aiConfig.modelOverride || aiConfig.models[difficulty] || aiConfig.models.medium;
+    const modelName = aiConfig.geminiModel || 'gemini-pro';
     const { systemPrompt, userPrompt } = aiConfig.getPrompts({
       template,
       type,
@@ -323,22 +324,112 @@ router.post('/ai/generate', async (req, res) => {
       constraints
     });
 
-    // --- 2. 呼叫 API ---
-    const completion = await openai.chat.completions.create({
+    // --- 2. 取得模型實例 ---
+    const generationConfig = {
+      temperature: aiConfig.temperature || 0.7,
+    };
+    
+    // 只有設定 maxTokens 時才加入限制（否則使用模型預設上限）
+    if (aiConfig.maxTokens) {
+      generationConfig.maxOutputTokens = aiConfig.maxTokens;
+      console.log('📊 Token 限制:', aiConfig.maxTokens);
+    } else {
+      console.log('📊 Token 限制: 無上限（使用模型預設）');
+    }
+    
+    const model = genAI.getGenerativeModel({ 
       model: modelName,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      response_format: { type: "json_object" },
-      temperature: aiConfig.temperature,
-      max_tokens: aiConfig.maxTokens
+      generationConfig
     });
+
+    // --- 3. 組合完整的 Prompt (Gemini 不分 system 和 user) ---
+    const fullPrompt = `${systemPrompt}\n\n${userPrompt}\n\n請務必以有效的 JSON 格式回應，不要包含任何額外說明文字。格式如下：\n{"generated": [{"question": "...", "answer": "...", "analysis": "...", "solution_concept": [...], "detailed_steps": [...], "difficulty": "...", "choices": [...]}]}`;
+
+    console.log('📝 Prompt 長度:', fullPrompt.length, '字元');
+    console.log('📝 Prompt 前 300 字元:', fullPrompt.substring(0, 300));
+    
+    // --- 4. 呼叫 API ---
+    console.log('呼叫 Google Gemini API...');
+    console.log('使用模型:', modelName);
+    
+    const result = await model.generateContent(fullPrompt);
+    const response = await result.response;
+    
+    // 詳細除錯資訊
+    console.log('\n🔍 完整回應結構:');
+    console.log('- candidates:', response.candidates?.length || 0);
+    console.log('- promptFeedback:', JSON.stringify(response.promptFeedback));
+    
+    if (response.candidates && response.candidates.length > 0) {
+      const candidate = response.candidates[0];
+      console.log('- finishReason:', candidate.finishReason);
+      console.log('- safetyRatings:', JSON.stringify(candidate.safetyRatings));
+      console.log('- content parts:', candidate.content?.parts?.length || 0);
+    }
+    
+    let responseText = '';
+    try {
+      responseText = response.text();
+    } catch (textError) {
+      console.error('❌ 無法取得 text():', textError.message);
+      
+      // 嘗試手動提取文字
+      if (response.candidates?.[0]?.content?.parts?.[0]?.text) {
+        responseText = response.candidates[0].content.parts[0].text;
+        console.log('✅ 手動提取到文字內容');
+      }
+    }
+    
+    console.log('Gemini 原始回應:', responseText.substring(0, 500));
+    console.log('回應長度:', responseText.length);
+    
+    // 檢查空回應
+    if (!responseText || responseText.trim().length === 0) {
+      console.error('❌ Gemini 回傳空白回應');
+      
+      // 檢查是否被安全過濾器阻擋
+      if (response.promptFeedback?.blockReason) {
+        return res.status(400).json({ 
+          message: 'Prompt 被安全過濾器阻擋', 
+          error: `Block reason: ${response.promptFeedback.blockReason}`,
+          promptFeedback: response.promptFeedback
+        });
+      }
+      
+      if (response.candidates?.[0]?.finishReason === 'SAFETY') {
+        return res.status(400).json({ 
+          message: '回應被安全過濾器阻擋', 
+          error: 'Response blocked by safety filters',
+          safetyRatings: response.candidates[0].safetyRatings
+        });
+      }
+      
+      return res.status(500).json({ 
+        message: 'AI 回應為空', 
+        error: 'Gemini returned empty response',
+        finishReason: response.candidates?.[0]?.finishReason || 'UNKNOWN'
+      });
+    }
+    
+    // 清理回應文字 (移除可能的 markdown 代碼塊標記)
+    responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    
+    console.log('清理後的回應:', responseText.substring(0, 200) + '...');
     
     // 嘗試解析回應
-    let responseText = completion.choices[0].message.content;
-    const result = JSON.parse(responseText);
-    res.json(result);
+    try {
+      const parsedResult = JSON.parse(responseText);
+      res.json(parsedResult);
+    } catch (parseError) {
+      console.error('❌ JSON 解析失敗:', parseError.message);
+      console.error('原始文字:', responseText);
+      return res.status(500).json({ 
+        message: 'AI 回應格式錯誤', 
+        error: parseError.message,
+        rawResponse: responseText.substring(0, 500) // 回傳前 500 字元供除錯
+      });
+    }
+    
   } catch (error) {
     console.error('AI 生成失敗:', error);
     res.status(500).json({ message: 'AI 生成失敗', error: error.message });
