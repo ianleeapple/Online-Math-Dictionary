@@ -6,8 +6,8 @@
 
 - 📚 **數學題庫管理**: 題目建立、編輯、分類
 - 🤖 **AI 智能生成**: 使用 Google Gemini 2.5 Pro 生成高品質數學題目
-- 🎤 **語音合成**: OpenAI TTS 中文語音生成
-- 🎥 **影片生成**: Remotion 數學解題影片自動生成
+- 🎤 **語音合成**: Gemini TTS (主要) + OpenAI TTS (備用) 雙供應商架構
+- 🎥 **影片生成**: Remotion 數學解題影片自動生成 (支援 MathJax 公式渲染)
 - 📈 **數據分析**: 使用者答題統計和分析
 - 👥 **用戶管理**: 學生/教師角色分離
 - 🛡️ **安全認證**: JWT + bcrypt 加密
@@ -28,9 +28,10 @@
 
 ### AI 相關
 - **Google Gemini 2.5 Pro**: AI 智能題目生成 (支援 Early Access)
-- **OpenAI TTS**: 語音合成
+- **Gemini TTS**: 主要語音合成服務 (免費)
+- **OpenAI TTS**: 備用語音合成服務 (付費，高品質)
 - **Remotion**: React 影片渲染引擎
-- **KaTeX**: 數學公式渲染
+- **MathJax 3**: 前端使用 CDN，後端使用 mathjax-full SSR
 
 ### 開發工具
 - **Remotion Studio**: 影片可視化編輯器
@@ -85,13 +86,19 @@ GEMINI_MODEL=gemini-2.5-pro
 AI_TEMPERATURE=0.7
 # AI_MAX_TOKENS=8192  # 註解掉此行即為無上限
 
-# OpenAI TTS (語音合成 - 可選)
+# 語音合成 (TTS)
+# Gemini TTS (主要，免費，使用同一個 GEMINI_API_KEY)
+GEMINI_TTS_MODEL=gemini-2.0-flash-exp
+GEMINI_TTS_VOICE=Puck  # 可選: Puck, Charon, Kore, Fenrir, Aoede
+
+# OpenAI TTS (備用，付費，高品質)
 OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_TTS_VOICE=nova  # 可選: nova, alloy, echo, fable, onyx, shimmer
 ```
 
 **取得 API Key：**
-- Google Gemini API: https://makersuite.google.com/app/apikey (免費額度)
-- OpenAI API: https://platform.openai.com/api-keys (TTS 語音功能)
+- Google Gemini API: https://aistudio.google.com/apikey (免費額度，支援文字生成與 TTS)
+- OpenAI API: https://platform.openai.com/api-keys (備用 TTS，付費)
 
 ### 3. 啟動服務
 
@@ -116,7 +123,7 @@ npm run studio
 
 ### 技術架構
 - **Remotion**: React 組件式影片渲染
-- **KaTeX**: 數學公式渲染
+- **MathJax**: 數學公式渲染
 - **OpenAI TTS**: 中文語音合成
 - **Chrome Headless**: 影片渲染引擎
 
@@ -155,9 +162,11 @@ POST /api/tts/generate
 
 ### 成本評估
 - **影片渲染**: 完全免費 (本地端 Remotion)
-- **語音合成**: ~$0.003-0.008 USD/次
+- **語音合成**: 
+  - Gemini TTS: 完全免費 (主要使用)
+  - OpenAI TTS: ~$0.003-0.008 USD/次 (備用)
 - **AI 腦本**: ~$0.003-0.006 USD/次
-- **總成本**: 約 $0.006-0.014 USD/部 (台幣 0.2-0.4元)
+- **總成本**: 使用 Gemini TTS 時約 $0.003-0.006 USD/部 (台幣 0.1-0.2元)
 
 ### 1. 環境準備
 
@@ -306,7 +315,7 @@ Online-Math-Dictionary/
 │   └── vite.svg                # Vite 標誌
 ├── src/                        # 前端源碼
 │   ├── components/             # Vue 元件
-│   │   └── HelloWorld.vue      # 範例元件
+│   │   └── MathContent.vue     # 數學公式渲染元件
 │   ├── views/                  # 頁面元件
 │   │   ├── HomeView.vue        # 首頁
 │   │   ├── LoginView.vue       # 登入頁面
@@ -387,8 +396,14 @@ Online-Math-Dictionary/
 *   `GET /api/video/file/:videoId`: 取得影片檔案
 *   `GET /api/video/:videoId`: 影片串流服務
 
-### 語音合成 (OpenAI TTS)
-*   `POST /api/tts/generate`: 文字轉語音
+### 語音合成 (Gemini TTS + OpenAI TTS)
+*   `POST /api/tts/generate`: 文字轉語音 (自動優先使用 Gemini TTS)
+  ```json
+  {
+    "text": "要轉換的文字",
+    "voice": "Puck|Charon|Kore|Fenrir|Aoede" // Gemini 音色
+  }
+  ```
 
 ## 🎯 使用說明
 
@@ -501,7 +516,7 @@ mysql -u root -p < server/schema.sql
 
 ### 3. **影片渲染技術**
 - Remotion React 元件式渲染
-- KaTeX 數學公式支援
+- MathJax 數學公式支援
 - 多場景教學流程
 - 支援語音旁白整合
 
@@ -539,5 +554,5 @@ mysql -u root -p < server/schema.sql
 ---
 
 **專案狀態**: 🟢 持續開發中  
-**最後更新**: 2025年10月3日  
-**核心技術**: Vue 3 + Express + MySQL + Google Gemini 2.5 Pro
+**最後更新**: 2025年10月6日  
+**核心技術**: Vue 3 + Express + MySQL + Google Gemini 2.5 Pro + MathJax 3

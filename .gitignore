@@ -2,9 +2,7 @@
 # 依賴套件 (Dependencies)
 # ==================================
 # 專案的依賴套件，不需納入版控
-/node_modules/
-/server/node_modules/
-/server/video/node_modules/
+node_modules/
 
 # ==================================
 # 環境變數與敏感資訊 (Secrets)
@@ -12,8 +10,6 @@
 # 包含 API 金鑰、資料庫密碼等，絕對不能上傳！
 .env
 .env.*
-server/.env
-server/.env.*
 
 # 只允許 .env.example 範本檔案被追蹤
 !/.env.example
@@ -34,7 +30,6 @@ server/.env.*
 
 # Remotion 影片渲染暫存
 .remotion/
-/server/video/.remotion/
 
 # 影片與 AI 生成的輸出/暫存目錄
 /server/output/
@@ -68,4 +63,31 @@ pnpm-debug.log*
 *.avi
 *.mp3
 *.wav
+*.pcm
+
+# ==================================
+# 作業系統暫存 (OS-specific)
+# ==================================
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# ==================================
+# Package Lock 檔案 (Lock Files)
+# ==================================
+# lock 檔案由開發者自行生成，不納入版控
+package-lock.json
+
+test-*.js
+**/test-*.js
+
+# 臨時文件與報告
+CLEANUP-REPORT.md
+PERFORMANCE-EVALUATION.md
+MATHJAX-SSR-UPDATE.md
+*.tmp
+*.temp
 
