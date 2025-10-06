@@ -332,9 +332,9 @@ router.post('/ai/generate', async (req, res) => {
     // 只有設定 maxTokens 時才加入限制（否則使用模型預設上限）
     if (aiConfig.maxTokens) {
       generationConfig.maxOutputTokens = aiConfig.maxTokens;
-      console.log('📊 Token 限制:', aiConfig.maxTokens);
+      console.log('Token 限制:', aiConfig.maxTokens);
     } else {
-      console.log('📊 Token 限制: 無上限（使用模型預設）');
+      console.log('Token 限制: 無上限（使用模型預設）');
     }
     
     const model = genAI.getGenerativeModel({ 
@@ -345,8 +345,8 @@ router.post('/ai/generate', async (req, res) => {
     // --- 3. 組合完整的 Prompt (Gemini 不分 system 和 user) ---
     const fullPrompt = `${systemPrompt}\n\n${userPrompt}\n\n請務必以有效的 JSON 格式回應，不要包含任何額外說明文字。格式如下：\n{"generated": [{"question": "...", "answer": "...", "analysis": "...", "solution_concept": [...], "detailed_steps": [...], "difficulty": "...", "choices": [...]}]}`;
 
-    console.log('📝 Prompt 長度:', fullPrompt.length, '字元');
-    console.log('📝 Prompt 前 300 字元:', fullPrompt.substring(0, 300));
+    console.log('Prompt 長度:', fullPrompt.length, '字元');
+    console.log('Prompt 前 300 字元:', fullPrompt.substring(0, 300));
     
     // --- 4. 呼叫 API ---
     console.log('呼叫 Google Gemini API...');
@@ -356,7 +356,7 @@ router.post('/ai/generate', async (req, res) => {
     const response = await result.response;
     
     // 詳細除錯資訊
-    console.log('\n🔍 完整回應結構:');
+    console.log('\n完整回應結構:');
     console.log('- candidates:', response.candidates?.length || 0);
     console.log('- promptFeedback:', JSON.stringify(response.promptFeedback));
     
@@ -371,12 +371,12 @@ router.post('/ai/generate', async (req, res) => {
     try {
       responseText = response.text();
     } catch (textError) {
-      console.error('❌ 無法取得 text():', textError.message);
+      console.error('無法取得 text():', textError.message);
       
       // 嘗試手動提取文字
       if (response.candidates?.[0]?.content?.parts?.[0]?.text) {
         responseText = response.candidates[0].content.parts[0].text;
-        console.log('✅ 手動提取到文字內容');
+        console.log('手動提取到文字內容');
       }
     }
     
@@ -385,7 +385,7 @@ router.post('/ai/generate', async (req, res) => {
     
     // 檢查空回應
     if (!responseText || responseText.trim().length === 0) {
-      console.error('❌ Gemini 回傳空白回應');
+      console.error('Gemini 回傳空白回應');
       
       // 檢查是否被安全過濾器阻擋
       if (response.promptFeedback?.blockReason) {
@@ -421,7 +421,7 @@ router.post('/ai/generate', async (req, res) => {
       const parsedResult = JSON.parse(responseText);
       res.json(parsedResult);
     } catch (parseError) {
-      console.error('❌ JSON 解析失敗:', parseError.message);
+      console.error('JSON 解析失敗:', parseError.message);
       console.error('原始文字:', responseText);
       return res.status(500).json({ 
         message: 'AI 回應格式錯誤', 
@@ -437,52 +437,148 @@ router.post('/ai/generate', async (req, res) => {
 });
 
 // ========================================================
-// TTS 文字轉語音 API
+// ========================================================
+// TTS 文字轉語音 API (支援 Gemini TTS、OpenAI TTS)
 // ========================================================
 router.post('/tts/generate', async (req, res) => {
   console.log('TTS API 被呼叫，請求內容:', req.body);
   
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    console.error('OpenAI API key 未設定');
-    return res.status(500).json({ error: 'OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file.' });
-  }
-
   try {
-    const { text, voice = 'alloy' } = req.body;
+    const { text, voice = 'alloy', provider = 'gemini' } = req.body;
 
     if (!text || text.trim() === '') {
       console.error('文字參數缺失或為空');
       return res.status(400).json({ error: 'Parameter "text" is required and cannot be empty.' });
     }
 
-    console.log('開始生成語音，文字:', text.substring(0, 50) + '...', '語音:', voice);
+    console.log('開始生成語音，提供者:', provider, '文字:', text.substring(0, 50) + '...', '語音:', voice);
 
-    const OpenAI = require('openai');
-    const openai = new OpenAI({ apiKey });
+    let audioBuffer;
 
-    // 呼叫 OpenAI 的語音生成 API
-    const mp3 = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: voice,
-      input: text,
-    });
+    // ========== OpenAI TTS ==========
+    if (provider === 'openai') {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        console.error('OpenAI API key 未設定');
+        return res.status(500).json({ error: 'OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file.' });
+      }
 
-    console.log('語音生成成功，準備傳送音訊檔');
+      const OpenAI = require('openai');
+      const openai = new OpenAI({ apiKey });
 
-    // 設定回應標頭，告訴瀏覽器這是一個 MP3 音訊檔
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Content-Disposition', 'inline; filename="speech.mp3"');
+      // 呼叫 OpenAI 的語音生成 API
+      const mp3 = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: voice,
+        input: text,
+      });
+
+      audioBuffer = Buffer.from(await mp3.arrayBuffer());
+    } 
+    // ========== Gemini TTS (推薦) ==========
+    else if (provider === 'gemini') {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.error('Gemini API key 未設定');
+        return res.status(500).json({ 
+          error: 'Gemini API key not configured. Please set GEMINI_API_KEY in your .env file.',
+          hint: '取得金鑰: https://makersuite.google.com/app/apikey'
+        });
+      }
+
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(apiKey);
+
+      // 使用 Gemini TTS 模型
+      const modelName = voice === 'pro' ? 'gemini-2.5-pro-preview-tts' : 'gemini-2.5-flash-preview-tts';
+      const model = genAI.getGenerativeModel({ 
+        model: modelName,
+        generationConfig: {
+          responseModalities: ['AUDIO']  // 指定音訊輸出
+        }
+      });
+
+      console.log(`使用 Gemini TTS 模型: ${modelName}`);
+      const result = await model.generateContent(text);
+      const response = await result.response;
+
+      // 從回應中提取音訊資料
+      if (response.candidates && response.candidates[0]) {
+        const candidate = response.candidates[0];
+        if (candidate.content && candidate.content.parts && candidate.content.parts[0]) {
+          const part = candidate.content.parts[0];
+          if (part.inlineData && part.inlineData.data) {
+            // Gemini 返回的是 PCM 格式（audio/L16），需要轉換為 WAV
+            const pcmBuffer = Buffer.from(part.inlineData.data, 'base64');
+            
+            console.log(`PCM 資料大小: ${pcmBuffer.length} bytes`);
+            
+            // 將 PCM 轉換為 WAV 格式（瀏覽器可播放）
+            // WAV 檔案 = WAV Header + PCM Data
+            const sampleRate = 24000;
+            const numChannels = 1;
+            const bitsPerSample = 16;
+            const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+            const blockAlign = numChannels * bitsPerSample / 8;
+            const dataSize = pcmBuffer.length;
+            const fileSize = 36 + dataSize;
+            
+            // 建立 WAV Header (44 bytes)
+            const wavHeader = Buffer.alloc(44);
+            
+            // RIFF chunk descriptor
+            wavHeader.write('RIFF', 0);                           // ChunkID
+            wavHeader.writeUInt32LE(fileSize, 4);                // ChunkSize
+            wavHeader.write('WAVE', 8);                           // Format
+            
+            // fmt sub-chunk
+            wavHeader.write('fmt ', 12);                          // Subchunk1ID
+            wavHeader.writeUInt32LE(16, 16);                      // Subchunk1Size (PCM = 16)
+            wavHeader.writeUInt16LE(1, 20);                       // AudioFormat (PCM = 1)
+            wavHeader.writeUInt16LE(numChannels, 22);             // NumChannels
+            wavHeader.writeUInt32LE(sampleRate, 24);              // SampleRate
+            wavHeader.writeUInt32LE(byteRate, 28);                // ByteRate
+            wavHeader.writeUInt16LE(blockAlign, 32);              // BlockAlign
+            wavHeader.writeUInt16LE(bitsPerSample, 34);           // BitsPerSample
+            
+            // data sub-chunk
+            wavHeader.write('data', 36);                          // Subchunk2ID
+            wavHeader.writeUInt32LE(dataSize, 40);                // Subchunk2Size
+            
+            // 合併 Header 和 PCM Data
+            audioBuffer = Buffer.concat([wavHeader, pcmBuffer]);
+            
+            console.log(`WAV 檔案大小: ${audioBuffer.length} bytes`);
+            
+            // 設定為 WAV 格式
+            res.setHeader('Content-Type', 'audio/wav');
+          } else {
+            throw new Error('Gemini 回應中沒有音訊資料');
+          }
+        } else {
+          throw new Error('Gemini 回應格式不正確');
+        }
+      } else {
+        throw new Error('Gemini 沒有返回有效的候選回應');
+      }
+    }
+    else {
+      return res.status(400).json({ error: 'Invalid provider. Use "openai" or "gemini".' });
+    }
+
+    console.log('語音生成成功，音訊檔案大小:', audioBuffer.length, 'bytes');
     
-    // 將 OpenAI 的回應轉換為 Buffer 並傳送
-    const buffer = Buffer.from(await mp3.arrayBuffer());
-    console.log('音訊檔案大小:', buffer.length, 'bytes');
-    
-    if (buffer.length === 0) {
+    if (audioBuffer.length === 0) {
       throw new Error('收到空的音訊檔案');
     }
+
+    // 設定回應標頭（Gemini 已在上面設定 Content-Type）
+    if (provider !== 'gemini') {
+      res.setHeader('Content-Type', 'audio/mpeg');
+    }
+    res.setHeader('Content-Disposition', `inline; filename="speech.${provider === 'gemini' ? 'wav' : 'mp3'}"`);
+    res.send(audioBuffer);
     
-    res.send(buffer);
     console.log('音訊檔案已成功傳送給前端');
 
   } catch (error) {
@@ -490,9 +586,9 @@ router.post('/tts/generate', async (req, res) => {
     
     // 更詳細的錯誤處理
     if (error.code === 'insufficient_quota') {
-      return res.status(429).json({ error: 'OpenAI API quota exceeded. Please check your billing.' });
+      return res.status(429).json({ error: 'API quota exceeded. Please check your billing.' });
     } else if (error.code === 'invalid_api_key') {
-      return res.status(401).json({ error: 'Invalid OpenAI API key.' });
+      return res.status(401).json({ error: 'Invalid API key.' });
     } else {
       return res.status(500).json({ 
         error: 'Failed to generate audio', 
@@ -501,3 +597,5 @@ router.post('/tts/generate', async (req, res) => {
     }
   }
 });
+
+module.exports = router;

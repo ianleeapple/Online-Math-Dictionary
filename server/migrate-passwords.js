@@ -41,7 +41,7 @@ async function migratePasswords() {
     
     for (const user of updatedUsers) {
       const isHashed = user.password.startsWith('$2b$') && user.password.length === 60;
-      console.log(`${user.email}: ${isHashed ? '✅ 雜湊格式' : '❌ 明文格式'}`);
+      console.log(`${user.email}: ${isHashed ? '雜湊格式' : '明文格式'}`);
     }
     
   } catch (error) {

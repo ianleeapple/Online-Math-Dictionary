@@ -62,11 +62,13 @@
           <span class="question-difficulty">{{ getDifficultyText(question.difficulty) }}</span>
         </div>
         <div class="question-content">
-          <p><strong>題目：</strong>{{ question.question }}</p>
+          <p><strong>題目：</strong><MathContent :content="question.question" /></p>
           <div v-if="question.choices && question.choices.length > 0">
             <p><strong>選項：</strong></p>
             <ul class="choices-list">
-              <li v-for="(choice, cIdx) in question.choices" :key="cIdx">{{ choice }}</li>
+              <li v-for="(choice, cIdx) in question.choices" :key="cIdx">
+                <MathContent :content="choice" />
+              </li>
             </ul>
           </div>
           <div class="solution-container">
@@ -74,23 +76,27 @@
               {{ showSolutionMap[index] ? '隱藏解答' : '顯示解答' }}
             </p>
             <div v-if="showSolutionMap[index]" class="solution">
-              <p><strong>答案：</strong>{{ question.answer }}</p>
+              <p><strong>答案：</strong><MathContent :content="question.answer" /></p>
               <div v-if="question.solution_concept && question.solution_concept.length > 0">
                 <p><strong>解題概念：</strong></p>
                 <ol class="steps-list">
-                  <li v-for="(step, sIdx) in question.solution_concept" :key="sIdx">{{ step }}</li>
+                  <li v-for="(step, sIdx) in question.solution_concept" :key="sIdx">
+                    <MathContent :content="step" />
+                  </li>
                 </ol>
               </div>
               <div v-if="question.detailed_steps && question.detailed_steps.length > 0">
                 <p><strong>詳細步驟：</strong></p>
                 <ol class="steps-list">
-                  <li v-for="(step, sIdx) in question.detailed_steps" :key="sIdx">{{ step }}</li>
+                  <li v-for="(step, sIdx) in question.detailed_steps" :key="sIdx">
+                    <MathContent :content="step" />
+                  </li>
                 </ol>
               </div>
             </div>
           </div>
           <div v-if="question.analysis" class="analysis-container">
-            <p><strong>核心概念解析：</strong>{{ question.analysis }}</p>
+            <p><strong>核心概念解析：</strong><MathContent :content="question.analysis" /></p>
           </div>
         </div>
       </div>
@@ -102,18 +108,34 @@
     <div class="card tts-card">
       <h3>語音生成測試 (TTS)</h3>
       <div class="form-group">
+        <label>選擇 TTS 引擎</label>
+        <select v-model="ttsProvider">
+          <option value="gemini">Gemini TTS（推薦，無需額外金鑰）</option>
+          <option value="openai">OpenAI TTS（穩定可靠）</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>要轉換的文字</label>
         <textarea v-model="ttsText" rows="3" placeholder="輸入文字來生成語音，例如：將上方生成的題目轉為語音"></textarea>
       </div>
       <div class="form-group">
         <label>選擇聲音</label>
         <select v-model="ttsVoice">
-          <option value="alloy">Alloy (中性，適合中文)</option>
-          <option value="nova">Nova (女性，推薦用於中文)</option>
-          <option value="shimmer">Shimmer (溫和，適合教學)</option>
-          <option value="echo">Echo (男性)</option>
-          <option value="fable">Fable (英式)</option>
-          <option value="onyx">Onyx (深沉)</option>
+          <!-- Gemini TTS 聲音 -->
+          <optgroup label="Gemini TTS" v-if="ttsProvider === 'gemini'">
+            <option value="flash">Flash（快速，推薦）</option>
+            <option value="pro">Pro（高品質）</option>
+          </optgroup>
+          
+          <!-- OpenAI TTS 聲音 -->
+          <optgroup label="OpenAI TTS" v-if="ttsProvider === 'openai'">
+            <option value="alloy">Alloy (中性，適合中文)</option>
+            <option value="nova">Nova (女性，推薦用於中文)</option>
+            <option value="shimmer">Shimmer (溫和，適合教學)</option>
+            <option value="echo">Echo (男性)</option>
+            <option value="fable">Fable (英式)</option>
+            <option value="onyx">Onyx (深沉)</option>
+          </optgroup>
         </select>
       </div>
       <div class="button-row">
@@ -133,7 +155,7 @@
         <div class="audio-controls">
           <button @click="playAudio" class="secondary-button">▶️ 播放</button>
           <button @click="pauseAudio" class="secondary-button">⏸️ 暫停</button>
-          <button @click="downloadAudio" class="secondary-button">💾 下載</button>
+          <button @click="downloadAudio" class="secondary-button">下載</button>
         </div>
       </div>
     </div>
@@ -142,7 +164,7 @@
     <!-- 影片生成區塊 -->
     <!-- ======================================================== -->
     <div class="card video-card" v-if="generatedQuestions.length > 0">
-      <h3>🎬 AI 影片生成 (實驗功能)</h3>
+      <h3>AI 影片生成 (實驗功能)</h3>
       <div class="form-group">
         <label>選擇要製作影片的題目</label>
         <select v-model="selectedQuestionIndex">
@@ -169,10 +191,10 @@
       </div>
       <div class="button-row">
         <button @click="generateVideo" :disabled="isVideoLoading" class="primary-button">
-          {{ isVideoLoading ? '生成中...' : '🎬 生成解題影片' }}
+          {{ isVideoLoading ? '生成中...' : '生成解題影片' }}
         </button>
         <button @click="previewScript" class="secondary-button">
-          📝 預覽影片腳本
+          預覽影片腳本
         </button>
       </div>
       <div v-if="isVideoLoading" class="loading-indicator">
@@ -180,18 +202,18 @@
         <p>{{ videoProgress }}</p>
       </div>
       <div v-if="generatedVideoUrl" class="video-result">
-        <h4>✅ 影片生成完成！</h4>
+        <h4>影片生成完成！</h4>
         <div class="test-notice">
-          <p>📝 <strong>測試版本說明：</strong></p>
+          <p><strong>測試版本說明：</strong></p>
           <p>• 目前顯示的是示例影片，實際影片生成功能開發中</p>
           <p>• 未來將整合 Remotion 生成真實的數學解題影片</p>
           <p>• 將包含數學公式渲染、動畫效果、語音同步等功能</p>
         </div>
         <video :src="generatedVideoUrl" controls class="generated-video"></video>
         <div class="video-controls">
-          <button @click="downloadVideo" class="secondary-button">💾 下載影片</button>
-          <button @click="shareVideo" class="secondary-button">🔗 分享連結</button>
-          <button @click="resetVideo" class="secondary-button">🔄 重新生成</button>
+          <button @click="downloadVideo" class="secondary-button">下載影片</button>
+          <button @click="shareVideo" class="secondary-button">分享連結</button>
+          <button @click="resetVideo" class="secondary-button">重新生成</button>
         </div>
       </div>
     </div>
@@ -199,7 +221,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick } from 'vue';
+import { ref, reactive, nextTick, watch } from 'vue';
+import MathContent from '../components/MathContent.vue';
 
 const sourceQuestion = ref('');
 const questionType = ref('填充題');
@@ -213,7 +236,8 @@ const showSolutionMap = reactive({});
 
 // TTS 相關變數  
 const ttsText = ref('歡迎使用線上數學辭典！今天我們要學習二次方程式的解法。首先，來看一個簡單例子：x 的平方，加上 2x，減去 3，等於 0。我們可以使用因式分解法來求解。');
-const ttsVoice = ref('nova');
+const ttsProvider = ref('gemini'); // 預設使用 Gemini TTS
+const ttsVoice = ref('flash'); // Gemini 預設使用 flash
 const isTtsLoading = ref(false);
 const audioPlayer = ref(null);
 const hasAudio = ref(false);
@@ -281,7 +305,11 @@ const generateSpeech = async () => {
     return;
   }
   
-  console.log('開始生成語音，文字:', ttsText.value.substring(0, 50) + '...', '語音:', ttsVoice.value);
+  console.log('開始生成語音');
+  console.log('- 引擎:', ttsProvider.value);
+  console.log('- 聲音:', ttsVoice.value);
+  console.log('- 文字:', ttsText.value.substring(0, 50) + '...');
+  
   isTtsLoading.value = true;
   
   try {
@@ -291,6 +319,7 @@ const generateSpeech = async () => {
       body: JSON.stringify({
         text: ttsText.value,
         voice: ttsVoice.value,
+        provider: ttsProvider.value, // 加入 provider 參數
       }),
     });
 
@@ -668,6 +697,15 @@ const resetVideo = () => {
   generatedVideoUrl.value = '';
   videoProgress.value = '準備開始...';
 };
+
+// 監聽 TTS 引擎切換，自動更新預設聲音
+watch(ttsProvider, (newProvider) => {
+  if (newProvider === 'gemini') {
+    ttsVoice.value = 'flash';
+  } else if (newProvider === 'openai') {
+    ttsVoice.value = 'nova';
+  }
+});
 </script>
 
 <style scoped>

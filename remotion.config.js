@@ -33,7 +33,7 @@ module.exports = {
         ...config.resolve,
         alias: {
           ...config.resolve.alias,
-          'katex': path.resolve(__dirname, 'node_modules/katex'),
+          // MathJax 使用 CDN，不需要 alias
         },
       },
       module: {

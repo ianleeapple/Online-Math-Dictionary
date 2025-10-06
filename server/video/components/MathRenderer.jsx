@@ -1,125 +1,81 @@
 import React from 'react';
-import { InlineMath, BlockMath } from 'react-katex';
-import './katex-minimal.css';
+import { mathjax } from 'mathjax-full/js/mathjax.js';
+import { TeX } from 'mathjax-full/js/input/tex.js';
+import { SVG } from 'mathjax-full/js/output/svg.js';
+import { liteAdaptor } from 'mathjax-full/js/adaptors/liteAdaptor.js';
+import { RegisterHTMLHandler } from 'mathjax-full/js/handlers/html.js';
+import { AllPackages } from 'mathjax-full/js/input/tex/AllPackages.js';
+
+// 初始化 MathJax (伺服器端)
+const adaptor = liteAdaptor();
+RegisterHTMLHandler(adaptor);
+
+const tex = new TeX({ packages: AllPackages });
+const svg = new SVG({ fontCache: 'none' });
+const html = mathjax.document('', { InputJax: tex, OutputJax: svg });
+
+/**
+ * 將 LaTeX 公式轉換為 SVG
+ */
+function renderMathToSVG(latex, display = false) {
+  try {
+    const node = html.convert(latex, { display });
+    return adaptor.innerHTML(node);
+  } catch (error) {
+    console.error('MathJax rendering error:', error);
+    return `<span style="color: red;">${latex}</span>`;
+  }
+}
+
+/**
+ * 解析文字中的數學公式並轉換為 SVG
+ */
+function parseAndRenderMath(text) {
+  if (!text) return '';
+  
+  let result = text;
+  
+  // 處理區塊公式 \[...\]
+  result = result.replace(/\\\[([\s\S]*?)\\\]/g, (match, formula) => {
+    return renderMathToSVG(formula, true);
+  });
+  
+  // 處理行內公式 \(...\)
+  result = result.replace(/\\\((.*?)\\\)/g, (match, formula) => {
+    return renderMathToSVG(formula, false);
+  });
+  
+  // 處理 Markdown 區塊公式 $$...$$
+  result = result.replace(/\$\$([\s\S]*?)\$\$/g, (match, formula) => {
+    return renderMathToSVG(formula, true);
+  });
+  
+  // 處理 Markdown 行內公式 $...$
+  result = result.replace(/\$([^$\n]+?)\$/g, (match, formula) => {
+    return renderMathToSVG(formula, false);
+  });
+  
+  return result;
+}
 
 /**
  * 數學公式渲染器
- * 支援 KaTeX 渲染數學公式和普通文字
+ * 支援 MathJax 渲染數學公式和普通文字 (伺服器端渲染)
  */
 export const MathRenderer = ({ content, inline = false }) => {
   if (!content) return null;
 
-  // 解析內容中的數學公式
-  const parseContent = (text) => {
-    const parts = [];
-    let currentIndex = 0;
-    
-    // 匹配 $...$ (行內公式) 和 $$...$$ (塊級公式)
-    const mathRegex = /(\$\$[\s\S]*?\$\$)|(\$[^$\n]*?\$)/g;
-    let match;
-    
-    while ((match = mathRegex.exec(text)) !== null) {
-      // 添加公式前的普通文字
-      if (match.index > currentIndex) {
-        const beforeText = text.substring(currentIndex, match.index);
-        if (beforeText.trim()) {
-          parts.push({
-            type: 'text',
-            content: beforeText,
-            key: `text-${parts.length}`,
-          });
-        }
-      }
-      
-      // 添加數學公式
-      const mathContent = match[0];
-      const isBlock = mathContent.startsWith('$$');
-      const formula = isBlock 
-        ? mathContent.slice(2, -2).trim()
-        : mathContent.slice(1, -1).trim();
-      
-      parts.push({
-        type: 'math',
-        content: formula,
-        isBlock,
-        key: `math-${parts.length}`,
-      });
-      
-      currentIndex = match.index + match[0].length;
-    }
-    
-    // 添加剩餘的普通文字
-    if (currentIndex < text.length) {
-      const remainingText = text.substring(currentIndex);
-      if (remainingText.trim()) {
-        parts.push({
-          type: 'text',
-          content: remainingText,
-          key: `text-${parts.length}`,
-        });
-      }
-    }
-    
-    return parts;
-  };
-
-  const renderPart = (part) => {
-    if (part.type === 'math') {
-      try {
-        if (part.isBlock) {
-          return (
-            <div key={part.key} style={{ margin: '20px 0', textAlign: 'center' }}>
-              <BlockMath math={part.content} />
-            </div>
-          );
-        } else {
-          return <InlineMath key={part.key} math={part.content} />;
-        }
-      } catch (error) {
-        console.error('KaTeX rendering error:', error);
-        // 如果 KaTeX 渲染失敗，顯示原始公式
-        return (
-          <span key={part.key} style={{ 
-            color: '#e74c3c', 
-            fontFamily: 'monospace',
-            backgroundColor: '#ffe6e6',
-            padding: '2px 4px',
-            borderRadius: '3px'
-          }}>
-            {part.isBlock ? `$$${part.content}$$` : `$${part.content}$`}
-          </span>
-        );
-      }
-    } else {
-      // 處理普通文字，包括換行
-      const lines = part.content.split('\n');
-      return (
-        <span key={part.key}>
-          {lines.map((line, index) => (
-            <React.Fragment key={index}>
-              {line}
-              {index < lines.length - 1 && <br />}
-            </React.Fragment>
-          ))}
-        </span>
-      );
-    }
-  };
-
-  const parts = parseContent(content);
-  
-  if (parts.length === 0) {
-    return <span>{content}</span>;
-  }
+  const renderedContent = parseAndRenderMath(content);
 
   return (
-    <div style={{ 
-      lineHeight: '1.6',
-      wordWrap: 'break-word',
-      whiteSpace: 'pre-wrap'
-    }}>
-      {parts.map(renderPart)}
-    </div>
+    <div 
+      style={{ 
+        lineHeight: '1.6',
+        wordWrap: 'break-word',
+        whiteSpace: 'pre-wrap'
+      }}
+      dangerouslySetInnerHTML={{ __html: renderedContent }}
+    />
   );
 };
 
