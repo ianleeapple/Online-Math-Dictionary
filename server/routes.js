@@ -348,12 +348,58 @@ router.post('/ai/generate', async (req, res) => {
     console.log('Prompt 長度:', fullPrompt.length, '字元');
     console.log('Prompt 前 300 字元:', fullPrompt.substring(0, 300));
     
-    // --- 4. 呼叫 API ---
+    // --- 4. 呼叫 API（帶重試和降級機制）---
     console.log('呼叫 Google Gemini API...');
     console.log('使用模型:', modelName);
     
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
+    let result, response;
+    let currentModel = modelName;
+    const maxRetries = 2;
+    const fallbackModels = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    
+    // 重試邏輯
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const model = genAI.getGenerativeModel({ 
+          model: currentModel,
+          generationConfig
+        });
+        
+        result = await model.generateContent(fullPrompt);
+        response = await result.response;
+        console.log(`✅ API 呼叫成功 (模型: ${currentModel}, 嘗試: ${attempt + 1})`);
+        break; // 成功就跳出
+        
+      } catch (error) {
+        console.error(`❌ API 呼叫失敗 (嘗試 ${attempt + 1}/${maxRetries}):`, error.message);
+        
+        // 503 錯誤：模型過載
+        if (error.status === 503 || error.message.includes('overloaded')) {
+          if (attempt < maxRetries - 1) {
+            // 嘗試降級到其他模型
+            const nextModelIndex = fallbackModels.indexOf(currentModel) + 1;
+            if (nextModelIndex < fallbackModels.length) {
+              currentModel = fallbackModels[nextModelIndex];
+              console.log(`⚠️ 模型過載，降級到: ${currentModel}`);
+              await new Promise(resolve => setTimeout(resolve, 1000)); // 等待 1 秒
+              continue;
+            } else {
+              console.log('⏳ 等待 2 秒後重試...');
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+          }
+        }
+        
+        // 最後一次嘗試還是失敗，拋出錯誤
+        if (attempt === maxRetries - 1) {
+          throw new Error(`AI 生成失敗 (${maxRetries} 次嘗試): ${error.message}`);
+        }
+      }
+    }
+    
+    if (!response) {
+      throw new Error('API 沒有返回有效回應');
+    }
     
     // 詳細除錯資訊
     console.log('\n完整回應結構:');
@@ -422,6 +468,63 @@ router.post('/ai/generate', async (req, res) => {
       res.json(parsedResult);
     } catch (parseError) {
       console.error('JSON 解析失敗:', parseError.message);
+      
+      // 嘗試修復常見的 JSON 格式問題
+      try {
+        console.log('[JSON 修復] 嘗試修復 LaTeX 轉義問題...');
+        
+        // 方法 1: 找到 JSON 的開始和結束
+        const jsonStart = responseText.indexOf('{');
+        const jsonEnd = responseText.lastIndexOf('}');
+        
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonStart < jsonEnd) {
+          let fixedText = responseText.substring(jsonStart, jsonEnd + 1);
+          
+          // 方法 2: 修復 LaTeX 公式中的轉義問題
+          // 將字串中的 LaTeX 公式部分暫時替換為佔位符
+          const latexPattern = /\\\\?\([^)]*\\\\?\)/g;
+          const latexFormulas = [];
+          let formulaIndex = 0;
+          
+          fixedText = fixedText.replace(latexPattern, (match) => {
+            const placeholder = `__LATEX_FORMULA_${formulaIndex}__`;
+            latexFormulas.push(match);
+            formulaIndex++;
+            return placeholder;
+          });
+          
+          // 現在可以安全解析 JSON
+          const parsedResult = JSON.parse(fixedText);
+          
+          // 將佔位符還原為 LaTeX 公式
+          const restoreLatex = (obj) => {
+            if (typeof obj === 'string') {
+              let result = obj;
+              latexFormulas.forEach((formula, index) => {
+                result = result.replace(`__LATEX_FORMULA_${index}__`, formula);
+              });
+              return result;
+            } else if (Array.isArray(obj)) {
+              return obj.map(restoreLatex);
+            } else if (typeof obj === 'object' && obj !== null) {
+              const restored = {};
+              for (const key in obj) {
+                restored[key] = restoreLatex(obj[key]);
+              }
+              return restored;
+            }
+            return obj;
+          };
+          
+          const restoredResult = restoreLatex(parsedResult);
+          console.log('[JSON 修復] 成功修復並解析');
+          return res.json(restoredResult);
+        }
+      } catch (fixError) {
+        console.error('[JSON 修復] 修復失敗:', fixError.message);
+      }
+      
+      // 修復失敗，返回原始錯誤
       console.error('原始文字:', responseText);
       return res.status(500).json({ 
         message: 'AI 回應格式錯誤', 
@@ -475,7 +578,7 @@ router.post('/tts/generate', async (req, res) => {
 
       audioBuffer = Buffer.from(await mp3.arrayBuffer());
     } 
-    // ========== Gemini TTS (推薦) ==========
+    // ========== Gemini TTS (實驗性功能) ==========
     else if (provider === 'gemini') {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -486,80 +589,103 @@ router.post('/tts/generate', async (req, res) => {
         });
       }
 
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(apiKey);
+      try {
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(apiKey);
 
-      // 使用 Gemini TTS 模型
-      const modelName = voice === 'pro' ? 'gemini-2.5-pro-preview-tts' : 'gemini-2.5-flash-preview-tts';
-      const model = genAI.getGenerativeModel({ 
-        model: modelName,
-        generationConfig: {
-          responseModalities: ['AUDIO']  // 指定音訊輸出
-        }
-      });
-
-      console.log(`使用 Gemini TTS 模型: ${modelName}`);
-      const result = await model.generateContent(text);
-      const response = await result.response;
-
-      // 從回應中提取音訊資料
-      if (response.candidates && response.candidates[0]) {
-        const candidate = response.candidates[0];
-        if (candidate.content && candidate.content.parts && candidate.content.parts[0]) {
-          const part = candidate.content.parts[0];
-          if (part.inlineData && part.inlineData.data) {
-            // Gemini 返回的是 PCM 格式（audio/L16），需要轉換為 WAV
-            const pcmBuffer = Buffer.from(part.inlineData.data, 'base64');
-            
-            console.log(`PCM 資料大小: ${pcmBuffer.length} bytes`);
-            
-            // 將 PCM 轉換為 WAV 格式（瀏覽器可播放）
-            // WAV 檔案 = WAV Header + PCM Data
-            const sampleRate = 24000;
-            const numChannels = 1;
-            const bitsPerSample = 16;
-            const byteRate = sampleRate * numChannels * bitsPerSample / 8;
-            const blockAlign = numChannels * bitsPerSample / 8;
-            const dataSize = pcmBuffer.length;
-            const fileSize = 36 + dataSize;
-            
-            // 建立 WAV Header (44 bytes)
-            const wavHeader = Buffer.alloc(44);
-            
-            // RIFF chunk descriptor
-            wavHeader.write('RIFF', 0);                           // ChunkID
-            wavHeader.writeUInt32LE(fileSize, 4);                // ChunkSize
-            wavHeader.write('WAVE', 8);                           // Format
-            
-            // fmt sub-chunk
-            wavHeader.write('fmt ', 12);                          // Subchunk1ID
-            wavHeader.writeUInt32LE(16, 16);                      // Subchunk1Size (PCM = 16)
-            wavHeader.writeUInt16LE(1, 20);                       // AudioFormat (PCM = 1)
-            wavHeader.writeUInt16LE(numChannels, 22);             // NumChannels
-            wavHeader.writeUInt32LE(sampleRate, 24);              // SampleRate
-            wavHeader.writeUInt32LE(byteRate, 28);                // ByteRate
-            wavHeader.writeUInt16LE(blockAlign, 32);              // BlockAlign
-            wavHeader.writeUInt16LE(bitsPerSample, 34);           // BitsPerSample
-            
-            // data sub-chunk
-            wavHeader.write('data', 36);                          // Subchunk2ID
-            wavHeader.writeUInt32LE(dataSize, 40);                // Subchunk2Size
-            
-            // 合併 Header 和 PCM Data
-            audioBuffer = Buffer.concat([wavHeader, pcmBuffer]);
-            
-            console.log(`WAV 檔案大小: ${audioBuffer.length} bytes`);
-            
-            // 設定為 WAV 格式
-            res.setHeader('Content-Type', 'audio/wav');
-          } else {
-            throw new Error('Gemini 回應中沒有音訊資料');
+        // 使用 Gemini 2.5 Flash TTS 模型（正確格式）
+        const modelName = 'gemini-2.5-flash-preview-tts';
+        const model = genAI.getGenerativeModel({ 
+          model: modelName,
+          generationConfig: {
+            responseModalities: ['AUDIO']  // 關鍵：必須在這裡指定音訊模式
           }
+        });
+
+        console.log(`[Gemini TTS] 使用模型: ${modelName}`);
+        console.log(`[Gemini TTS] 文字長度: ${text.length} 字元`);
+        
+        // 生成語音（Gemini TTS 會回傳 PCM 格式）
+        const result = await model.generateContent({
+          contents: [{
+            role: 'user',
+            parts: [{ text: text }]
+          }]
+        });
+        
+        const response = result.response;
+
+        // 從回應中提取音訊資料（PCM 格式）
+        if (response.candidates && response.candidates[0]) {
+          const part = response.candidates[0].content?.parts?.[0];
+          const audioContent = part?.inlineData?.data;
+          const mimeType = part?.inlineData?.mimeType;
+          
+          if (!audioContent) {
+            throw new Error('Gemini TTS 回應中沒有音訊資料');
+          }
+          
+          console.log(`[Gemini TTS] 格式: ${mimeType}`);
+          
+          // Gemini 返回的是 PCM 格式，需要加上 WAV header
+          const pcmBuffer = Buffer.from(audioContent, 'base64');
+          
+          // 將 PCM 轉換為 WAV 格式
+          // Gemini TTS 規格: 24kHz, 16-bit, Mono
+          const sampleRate = 24000;
+          const numChannels = 1;
+          const bitsPerSample = 16;
+          const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+          const blockAlign = numChannels * bitsPerSample / 8;
+          const dataSize = pcmBuffer.length;
+          const fileSize = 36 + dataSize;
+          
+          const wavHeader = Buffer.alloc(44);
+          wavHeader.write('RIFF', 0);
+          wavHeader.writeUInt32LE(fileSize, 4);
+          wavHeader.write('WAVE', 8);
+          wavHeader.write('fmt ', 12);
+          wavHeader.writeUInt32LE(16, 16);
+          wavHeader.writeUInt16LE(1, 20);
+          wavHeader.writeUInt16LE(numChannels, 22);
+          wavHeader.writeUInt32LE(sampleRate, 24);
+          wavHeader.writeUInt32LE(byteRate, 28);
+          wavHeader.writeUInt16LE(blockAlign, 32);
+          wavHeader.writeUInt16LE(bitsPerSample, 34);
+          wavHeader.write('data', 36);
+          wavHeader.writeUInt32LE(dataSize, 40);
+          
+          audioBuffer = Buffer.concat([wavHeader, pcmBuffer]);
+          
+          console.log(`[Gemini TTS] WAV 檔案大小: ${(audioBuffer.length / 1024).toFixed(2)} KB`);
+          
+          // 設定為 WAV 格式
+          res.setHeader('Content-Type', 'audio/wav');
         } else {
-          throw new Error('Gemini 回應格式不正確');
+          throw new Error('Gemini TTS 回應格式不正確或沒有音訊資料');
         }
-      } else {
-        throw new Error('Gemini 沒有返回有效的候選回應');
+      } catch (geminiError) {
+        console.error('[Gemini TTS] 失敗，錯誤詳情:', geminiError.message);
+        
+        // 如果 Gemini TTS 失敗，自動回退到 OpenAI TTS
+        if (process.env.OPENAI_API_KEY) {
+          console.log('[Gemini TTS] 自動回退到 OpenAI TTS');
+          
+          const OpenAI = require('openai');
+          const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+          const mp3 = await openai.audio.speech.create({
+            model: "tts-1",
+            voice: 'nova',
+            input: text,
+          });
+
+          audioBuffer = Buffer.from(await mp3.arrayBuffer());
+          console.log(`[OpenAI TTS] 備用方案成功，檔案大小: ${(audioBuffer.length / 1024).toFixed(2)} KB`);
+          res.setHeader('Content-Type', 'audio/mpeg');
+        } else {
+          throw new Error(`Gemini TTS 失敗且沒有 OpenAI 備用: ${geminiError.message}`);
+        }
       }
     }
     else {

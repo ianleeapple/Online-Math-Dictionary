@@ -7,33 +7,64 @@ import {
   Sequence,
   spring,
   useSpringValue,
+  Audio,
+  staticFile,
 } from 'remotion';
 import { MathRenderer } from './MathRenderer';
 import { SceneTransition } from './SceneTransition';
 
 /**
+ * 通用內容提取函數
+ * 相容新舊資料格式，確保能取得場景內容
+ */
+const getSceneContent = (scene) => {
+  return scene.visualContent || scene.content || scene.narrative || '';
+};
+
+/**
  * 數學解題影片的主要序列組件
  * 根據腳本內容渲染不同的場景
  */
-export const MathVideoSequence = ({ question, script, style, options }) => {
+export const MathVideoSequence = ({ question, script, style, options, audioTimeline }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames, width, height } = useVideoConfig();
+
+  // Debug: 檢查音訊路徑
+  React.useEffect(() => {
+    if (audioTimeline) {
+      console.log('[MathVideoSequence] 音訊路徑:', audioTimeline.audioPath);
+      console.log('[MathVideoSequence] 總時長:', audioTimeline.totalDuration, '秒');
+      console.log('[MathVideoSequence] 影片總幀數:', durationInFrames);
+      console.log('[MathVideoSequence] 影片總秒數:', durationInFrames / fps);
+    }
+  }, [audioTimeline, durationInFrames, fps]);
 
   // 計算每個場景的開始幀和持續幀數
   const scenes = script.scenes || [];
   let currentFrame = 0;
-  const sceneFrames = scenes.map((scene) => {
-    const duration = scene.duration || 3;
-    const frames = duration * fps;
-    const result = {
-      ...scene,
-      startFrame: currentFrame,
-      endFrame: currentFrame + frames,
-      durationInFrames: frames,
-    };
-    currentFrame += frames;
-    return result;
-  });
+  const sceneFrames = React.useMemo(() => {
+    let currentFrame = 0;
+    const frames = scenes.map((scene, index) => {
+      const duration = scene.duration || 3;
+      const frameCount = Math.ceil(duration * fps);  // 使用 ceil 確保不會遺漏幀數
+      const result = {
+        ...scene,
+        startFrame: currentFrame,
+        endFrame: currentFrame + frameCount,
+        durationInFrames: frameCount,
+      };
+      currentFrame += frameCount;
+      return result;
+    });
+    
+    // Debug: 只在第一次計算時輸出（useMemo 確保只執行一次）
+    console.log('[場景時長] 使用音訊實際時長:');
+    scenes.forEach((s, i) => {
+      console.log(`  場景 ${i + 1} (${s.type}): ${s.duration?.toFixed(2) || 'N/A'} 秒 = ${Math.ceil((s.duration || 3) * fps)} 幀`);
+    });
+    
+    return frames;
+  }, [scenes, fps]);
 
   return (
     <AbsoluteFill style={{ backgroundColor: getBackgroundColor(style) }}>
@@ -70,6 +101,16 @@ export const MathVideoSequence = ({ question, script, style, options }) => {
           </Sequence>
         );
       })}
+      
+      {/* 音訊播放 - 使用 Sequence 包裝以控制播放時長 */}
+      {audioTimeline && audioTimeline.audioPath && (
+        <Sequence from={0} durationInFrames={durationInFrames}>
+          <Audio
+            src={staticFile(audioTimeline.audioPath)}
+            volume={1.0}
+          />
+        </Sequence>
+      )}
     </AbsoluteFill>
   );
 };
@@ -117,13 +158,16 @@ const SceneComponent = ({ scene, style, width, height, fps }) => {
 const QuestionScene = ({ scene, style }) => {
   const frame = useCurrentFrame();
   
+  // 使用統一內容提取函數
+  const content = getSceneContent(scene);
+  
   // 打字機效果
   const textProgress = interpolate(frame, [0, 60], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
   
-  const displayedText = scene.content.substring(0, Math.floor(scene.content.length * textProgress));
+  const displayedText = content.substring(0, Math.floor(content.length * textProgress));
 
   return (
     <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -141,13 +185,16 @@ const QuestionScene = ({ scene, style }) => {
  * 概念解析場景
  */
 const AnalysisScene = ({ scene, style }) => {
+  // 使用統一內容提取函數
+  const content = getSceneContent(scene);
+  
   return (
     <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <div style={getTitleStyle(style)}>
         {scene.title}
       </div>
       <div style={getContentStyle(style)}>
-        <MathRenderer content={scene.content} />
+        <MathRenderer content={content} />
       </div>
     </AbsoluteFill>
   );
@@ -158,7 +205,10 @@ const AnalysisScene = ({ scene, style }) => {
  */
 const ConceptScene = ({ scene, style }) => {
   const frame = useCurrentFrame();
-  const concepts = scene.content.split('\n').filter(Boolean);
+  
+  // 使用統一內容提取函數
+  const content = getSceneContent(scene);
+  const concepts = content.split('\n').filter(Boolean);
   
   return (
     <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -189,7 +239,10 @@ const ConceptScene = ({ scene, style }) => {
  */
 const StepsScene = ({ scene, style }) => {
   const frame = useCurrentFrame();
-  const steps = scene.content.split('\n').filter(Boolean);
+  
+  // 使用統一內容提取函數
+  const content = getSceneContent(scene);
+  const steps = content.split('\n').filter(Boolean);
   
   return (
     <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column' }}>
@@ -237,6 +290,9 @@ const StepsScene = ({ scene, style }) => {
 const AnswerScene = ({ scene, style }) => {
   const frame = useCurrentFrame();
   
+  // 使用統一內容提取函數
+  const content = getSceneContent(scene);
+  
   // 放大效果
   const scale = spring({
     frame,
@@ -252,7 +308,7 @@ const AnswerScene = ({ scene, style }) => {
         {scene.title}
       </div>
       <div style={{ ...getAnswerStyle(style), transform: `scale(${scale})` }}>
-        <MathRenderer content={scene.content} />
+        <MathRenderer content={content} />
       </div>
     </AbsoluteFill>
   );
@@ -262,10 +318,13 @@ const AnswerScene = ({ scene, style }) => {
  * 預設場景
  */
 const DefaultScene = ({ scene, style }) => {
+  // 使用統一內容提取函數
+  const content = getSceneContent(scene);
+  
   return (
     <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <div style={getContentStyle(style)}>
-        <MathRenderer content={scene.content} />
+        <MathRenderer content={content} />
       </div>
     </AbsoluteFill>
   );

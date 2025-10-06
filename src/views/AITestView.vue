@@ -182,12 +182,17 @@
         </select>
       </div>
       <div class="form-group">
-        <label>影片長度控制</label>
+        <label>影片功能選項</label>
         <div class="checkbox-group">
           <label><input type="checkbox" v-model="includeAnalysis"> 包含概念解析</label>
           <label><input type="checkbox" v-model="includeSteps"> 包含詳細步驟</label>
           <label><input type="checkbox" v-model="includeVoiceover"> 包含語音旁白</label>
+          <label><input type="checkbox" v-model="enableSmartNarrative" checked> 啟用 AI 智能教學旁白</label>
+          <label><input type="checkbox" v-model="enableAudioSync" checked> 啟用文音同步</label>
         </div>
+        <p class="help-text" v-if="enableSmartNarrative">
+          智能教學模式：AI 會自動加入教學停頓、提問引導，讓旁白更像真正的老師講解
+        </p>
       </div>
       <div class="button-row">
         <button @click="generateVideo" :disabled="isVideoLoading" class="primary-button">
@@ -248,6 +253,8 @@ const videoStyle = ref('simple');
 const includeAnalysis = ref(true);
 const includeSteps = ref(true);
 const includeVoiceover = ref(true);
+const enableSmartNarrative = ref(true);  // 智能教學旁白
+const enableAudioSync = ref(true);       // 文音同步
 const isVideoLoading = ref(false);
 const videoProgress = ref('準備開始...');
 const generatedVideoUrl = ref('');
@@ -525,7 +532,9 @@ const generateVideo = async () => {
         options: {
           includeAnalysis: includeAnalysis.value,
           includeSteps: includeSteps.value,
-          includeVoiceover: includeVoiceover.value
+          includeVoiceover: includeVoiceover.value,
+          enableNarrative: enableSmartNarrative.value,  // 使用前端選項
+          enableAudio: enableAudioSync.value            // 使用前端選項
         }
       })
     });
@@ -755,6 +764,7 @@ textarea { resize: vertical; }
 .video-card h3 { color: #8B5CF6; margin-bottom: 20px; }
 .checkbox-group { display: flex; gap: 15px; flex-wrap: wrap; }
 .checkbox-group label { display: flex; align-items: center; gap: 5px; font-size: 14px; }
+.help-text { margin-top: 8px; font-size: 13px; color: #6B7280; line-height: 1.5; background-color: #F3F4F6; padding: 8px 12px; border-radius: 4px; border-left: 3px solid #8B5CF6; }
 .video-result { margin-top: 20px; padding: 20px; background-color: #f0f8ff; border-radius: 8px; border: 1px solid #8B5CF6; }
 .generated-video { width: 100%; max-width: 600px; border-radius: 8px; margin: 15px 0; }
 .video-controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 15px; }

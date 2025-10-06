@@ -57,6 +57,8 @@ pnpm-debug.log*
 # AI/影片生成檔案 (Generated Media)
 # ==================================
 # 避免將大型媒體檔案加入版控
+/public/audio/
+/public/video/
 *.mp4
 *.webm
 *.mov
@@ -76,11 +78,8 @@ Thumbs.db
 Desktop.ini
 
 # ==================================
-# Package Lock 檔案 (Lock Files)
+# 測試與臨時檔案 (Test & Temp)
 # ==================================
-# lock 檔案由開發者自行生成，不納入版控
-package-lock.json
-
 test-*.js
 **/test-*.js
 
