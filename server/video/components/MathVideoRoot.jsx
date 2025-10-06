@@ -12,10 +12,22 @@ export const MathVideoRoot = () => {
       <Composition
         id="MathVideoComposition"
         component={MathVideoSequence}
-        durationInFrames={600} // 20秒 * 30fps，會被動態覆蓋
+        durationInFrames={600} // 預設值，會被 calculateMetadata 覆蓋
         fps={30}
         width={1920}
         height={1080}
+        // 動態計算影片時長
+        calculateMetadata={({ props }) => {
+          const fps = props.fps || 30;
+          const durationInFrames = props.durationInFrames || 600;
+          
+          return {
+            fps,
+            durationInFrames,
+            width: props.width || 1920,
+            height: props.height || 1080,
+          };
+        }}
         defaultProps={{
           question: '計算二次方程式 $x^2 + 5x + 6 = 0$ 的解',
           script: {

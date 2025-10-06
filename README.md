@@ -5,7 +5,7 @@
 ## ✨ 主要功能
 
 - 📚 **數學題庫管理**: 題目建立、編輯、分類
-- 🤖 **AI 智能生成**: 使用 Google Gemini 2.5 Pro 生成高品質數學題目
+- 🤖 **AI 智能生成**: 使用 Google Gemini 2.5 Flash 生成高品質數學題目
 - 🎤 **語音合成**: Gemini TTS (主要) + OpenAI TTS (備用) 雙供應商架構
 - 🎥 **影片生成**: Remotion 數學解題影片自動生成 (支援 MathJax 公式渲染)
 - 📈 **數據分析**: 使用者答題統計和分析
@@ -27,7 +27,7 @@
 - **bcrypt**: 密碼雜湊加密
 
 ### AI 相關
-- **Google Gemini 2.5 Pro**: AI 智能題目生成 (支援 Early Access)
+- **Google Gemini 2.5 Flash**: AI 智能題目生成
 - **Gemini TTS**: 主要語音合成服務 (免費)
 - **OpenAI TTS**: 備用語音合成服務 (付費，高品質)
 - **Remotion**: React 影片渲染引擎
@@ -80,15 +80,14 @@ BCRYPT_SALT_ROUNDS=12
 
 # AI 功能 (Google Gemini - 必填)
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-pro
+GEMINI_MODEL=gemini-2.5-flash
 
 # AI 生成參數 (可選)
 AI_TEMPERATURE=0.7
-# AI_MAX_TOKENS=8192  # 註解掉此行即為無上限
 
 # 語音合成 (TTS)
 # Gemini TTS (主要，免費，使用同一個 GEMINI_API_KEY)
-GEMINI_TTS_MODEL=gemini-2.0-flash-exp
+GEMINI_TTS_MODEL=gemini-2.5-flash
 GEMINI_TTS_VOICE=Puck  # 可選: Puck, Charon, Kore, Fenrir, Aoede
 
 # OpenAI TTS (備用，付費，高品質)
@@ -427,132 +426,97 @@ Online-Math-Dictionary/
 *   建立班級並取得加入代碼
 *   管理班級成員
 
-## 🗄️ 資料庫架構
+## 🚀 專案啟動
 
-主要表格：
-- `users`: 使用者資料 (學生/教師，含 bcrypt 密碼雜湊)
-- `classes`: 班級資料 (教師建立的班級)
-- `class_members`: 班級成員關聯表
-- `quiz`: 測驗記錄 (題型、難度、分數等)
-- `achievement`: 成就系統 (學習進度追蹤)
+### 1. 啟動後端 API 伺服器
 
-資料庫初始化：
 ```bash
-mysql -u root -p < server/schema.sql
+cd server
+npm start
+```
+API 伺服器將在 `http://localhost:3000` 啟動。
+
+### 2. 啟動前端開發伺服器
+
+```bash
+npm run dev
+```
+前端開發伺服器將在 `http://localhost:5173` 啟動。
+
+### 3. 啟動 Remotion Studio (影片開發)
+
+```bash
+cd server/video
+npm run studio
+```
+Remotion Studio 將在 `http://localhost:3000` 啟動 (與後端 API 衝突，請擇一啟動)。
+
+## 🎥 影片生成流程
+
+1. **觸發 API**:
+   - `POST /api/video/generate`
+   - 帶有 `questionId` 或 `script` (JSON 格式)
+
+2. **後端處理**:
+   - **AI 劇本生成**: 若提供 `questionId`，使用 Gemini 生成教學劇本。
+   - **語音合成 (TTS)**: 使用 Gemini TTS 將劇本轉換為語音 (`.wav`)。
+   - **音訊同步**: 計算每個場景的音訊時長，同步影片時間軸。
+   - **Remotion 渲染**:
+     - 使用 `@remotion/renderer` 呼叫 Chrome Headless 進行渲染。
+     - 將 MathJax 公式渲染為 SVG，嵌入影片。
+   - **影片輸出**: 生成 `output.mp4` 影片。
+
+## 🤖 AI 功能
+
+### 1. 題目生成
+
+- **API**: `POST /api/questions/generate`
+- **模型**: `gemini-2.5-flash`
+- **流程**:
+  1. 使用者提供主題、難度。
+  2. 後端組合 Prompt，呼叫 Gemini API。
+  3. **JSON 修復**: 智能修復 Gemini 回傳的 JSON 格式 (包含 LaTeX 公式)。
+  4. 將生成的題目存入資料庫。
+
+### 2. 語音合成 (TTS)
+
+- **主要**: Gemini TTS (`gemini-2.5-flash`)
+- **備用**: OpenAI TTS
+- **特色**:
+  - 雙供應商架構，自動容錯切換。
+  - 純 JavaScript 實現 PCM 音訊合併，無需 `ffmpeg`。
+
+## 📂 專案結構
+
+```
+/
+├── public/                 # 靜態資源 (圖片、音訊)
+│   ├── audio/              # TTS 生成的音訊
+│   └── video/              # Remotion 生成的影片
+├── server/
+│   ├── video/              # Remotion 影片專案
+│   │   ├── components/     # Remotion React 元件
+│   │   ├── public/         # 影片專案的靜態資源
+│   │   ├── AudioSyncManager.js # 音訊同步與合併
+│   │   ├── NarrativeScriptGenerator.js # AI 劇本生成
+│   │   └── VideoGenerator.js # 影片渲染主程式
+│   ├── .env.example        # 環境變數範本
+│   ├── db.js               # 資料庫連線
+│   ├── index.js            # Express 主程式
+│   └── routes.js           # API 路由
+└── src/                    # Vue 前端專案
+    ├── components/         # Vue 元件
+    ├── views/              # 頁面元件
+    ├── router.js           # 路由設定
+    └── main.js             # Vue 啟動點
 ```
 
-## 🚀 未來規劃
+## ⚠️ 注意事項
 
-### 短期目標
-- [ ] 影片緩存機制
-- [ ] 批量影片生成
-- [ ] 更多影片樣式模板
-- [ ] 手寫識別輸入
+- **API 金鑰**: 請務必將 `.env` 加入 `.gitignore`，避免金鑰外洩。
+- **Remotion 與 API 衝突**: Remotion Studio 和後端 API 預設都使用 3000 port，請擇一啟動或修改 `remotion.config.js` 的 port。
+- **Chrome/Chromium**: 影片渲染需要安裝 Chrome 或 Chromium 瀏覽器。
 
-### 中期目標
-- [ ] Remotion Studio 完整整合
-- [ ] 影片直播功能
-- [ ] 多語言支援
-- [ ] 行動版 APP
+## 📜 License
 
-### 長期目標
-- [ ] VR/AR 數學教學
-- [ ] 智能答疑機器人
-- [ ] 個人化學習路徑
-
-## 🛡️ 安全性注意事項
-
-- **密碼安全**: 使用 bcrypt 進行密碼雜湊，不儲存明文密碼
-- **環境變數**: 敏感資訊透過 `.env` 管理，勿提交至版本控制
-- **API 金鑰**: OpenAI API 金鑰請妥善保管，注意使用額度
-- **資料庫權限**: 生產環境請限制資料庫使用者權限
-
-## 🐛 常見問題
-
-### Q: AI 生成回傳空白或錯誤
-**A:** 請檢查：
-1. `GEMINI_API_KEY` 是否正確設定在 `.env`
-2. 是否有網路連線問題
-3. 檢查 `AI_MAX_TOKENS` 設定 (建議註解掉或設為 8192)
-4. 查看後端 Console 的詳細錯誤訊息
-
-### Q: 影片生成失敗
-**A:** 請檢查：
-1. Remotion 依賴是否正確安裝 (`cd server/video && npm install`)
-2. Chrome Headless 是否正常下載
-3. 系統記憶體是否足夠 (建議 8GB+)
-
-### Q: 語音生成無聲音
-**A:** 請確認：
-1. OpenAI API 金鑰是否有效
-2. TTS API 額度是否充足
-3. 瀏覽器是否允許自動播放音訊
-
-### Q: 無法連線到資料庫
-**A:** 請檢查：
-1. MySQL 服務是否正常啟動
-2. `.env` 檔案中的 `DB_*` 設定是否正確
-3. 資料庫 `math_platform` 是否已建立
-4. 使用者權限是否足夠
-
-### Q: 登入失敗 (密碼錯誤)
-**A:** 如果是舊資料庫遷移：
-1. 執行密碼遷移工具: `node server/migrate-passwords.js`
-2. 這會將明文密碼轉換為 bcrypt 雜湊
-
-## � 技術亮點
-
-### 1. **Google Gemini 整合**
-- 使用最新 `@google/generative-ai` SDK
-- 支援 Gemini 2.5 Pro (Early Access)
-- 智能 Token 管理 (無上限模式)
-- 詳細錯誤處理與除錯日誌
-
-### 2. **密碼安全**
-- bcrypt 雜湊演算法 (12 rounds)
-- 密碼遷移工具 (明文→雜湊)
-- 登入時密碼驗證
-- API 回應絕不包含密碼
-
-### 3. **影片渲染技術**
-- Remotion React 元件式渲染
-- MathJax 數學公式支援
-- 多場景教學流程
-- 支援語音旁白整合
-
-### 4. **開發體驗**
-- VS Code Tasks 整合
-- API Proxy 自動轉發 (Vite)
-- 集中化 AI 設定檔
-- 詳細的錯誤訊息與日誌
-
-## �📝 責任聲明
-
-- 本專案使用 **Google Gemini API** 與 **OpenAI API**，請遵守各自的使用條款
-- 影片生成功能僅供教育目的使用
-- 請妥善保管 API 金鑰，避免外洩
-- 注意 API 使用額度，避免超額費用
-
-## 📄 授權條款
-
-本專案採用 MIT 授權條款，詳見 [LICENSE](LICENSE) 檔案。
-
-## 🤝 貢獻指南
-
-歡迎提交 Issue 或 Pull Request 來改善此專案！
-
-### 開發建議
-- 使用 VS Code 作為開發環境
-- 安裝 Volar (Vue Language Features) 擴充功能
-- 啟用 ESLint 與 Prettier 進行程式碼格式化
-- 提交前請確保所有測試通過
-
-## 📞 聯絡資訊
-
-如有任何問題或建議，歡迎透過 GitHub Issues 聯繫。
-
----
-
-**專案狀態**: 🟢 持續開發中  
-**最後更新**: 2025年10月6日  
-**核心技術**: Vue 3 + Express + MySQL + Google Gemini 2.5 Pro + MathJax 3
+[MIT](LICENSE)
