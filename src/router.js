@@ -6,7 +6,7 @@ import QuizRecordView from './views/QuizRecordView.vue';
 import ClassGroupView from './views/ClassGroupView.vue';
 import LoginView from './views/LoginView.vue';
 import RegisterView from './views/RegisterView.vue';
-
+import AddQuestionView from './views/AddQuestionView.vue';
 import AITestView from './views/AITestView.vue';
 
 const routes = [
@@ -17,6 +17,7 @@ const routes = [
   { path: '/class-group', name: 'ClassGroup', component: ClassGroupView },
   { path: '/login', name: 'Login', component: LoginView },
   { path: '/register', name: 'Register', component: RegisterView },
+  { path: '/add-question', name: 'AddQuestion', component: AddQuestionView },
   { path: '/ai-test', name: 'AITest', component: AITestView },
 ];
 
