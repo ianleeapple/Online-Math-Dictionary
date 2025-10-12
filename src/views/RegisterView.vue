@@ -105,7 +105,7 @@ async function onRegister() {
     });
     if (!res.ok) throw new Error('註冊失敗');
     const data = await res.json();
-    alert('註冊成功！正在跳轉到登入頁面...');
+    alert('註冊成功！');
     // 跳轉到登入頁面
     router.push('/login');
   } catch (e) {

@@ -94,6 +94,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { useRouter } from 'vue-router';
 
 const allConcepts = ref({
   國中: {
@@ -154,7 +155,7 @@ function addOption() {
 function removeOption(index) {
   newQuestion.value.options.splice(index, 1);
 }
-function addQuestion() {
+async function addQuestion() {
   if (!selectedLevel.value) return alert('請選擇範圍');
   if (!newQuestion.value.text.trim()) return alert('請輸入題目內容');
   if (!newQuestion.value.mode) return alert('請選擇加入方式');
@@ -162,26 +163,61 @@ function addQuestion() {
   if (!selectedConcept.value) return alert('請選擇觀念');
   if (!selectedDifficulty.value) return alert('請選擇難易度');
 
+  // 取得目前登入使用者（若有）
+  const currentUser = localStorage.getItem('currentUser');
+  let userId = null;
+  if (currentUser) {
+    try {
+      userId = JSON.parse(currentUser).id;
+    } catch { userId = null; }
+  }
+
   const payload = {
-    ...newQuestion.value,
     level: selectedLevel.value,
     topic: selectedTopic.value,
     concept: selectedConcept.value,
-    difficulty: selectedDifficulty.value
+    content: newQuestion.value.text,
+    type: newQuestion.value.type,
+    options: newQuestion.value.options,
+    answer: newQuestion.value.answer,
+    mode: newQuestion.value.mode,
+    difficulty: selectedDifficulty.value,
+    user_id: userId
   };
 
-  console.log('新增題目:', payload);
-  alert('題目已新增！（示意）');
+  try {
+    const res = await fetch('/api/questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || '新增題目失敗');
+    }
 
-  // reset
-  newQuestion.value = { text: '', type: 'single', options: [], answer: '', mode: '' };
-  selectedLevel.value = '';
-  selectedTopic.value = '';
-  selectedConcept.value = '';
-  selectedDifficulty.value = '';
+    alert('題目已新增（已存入資料庫）');
+
+    // reset
+    newQuestion.value = { text: '', type: 'single', options: [], answer: '', mode: '' };
+    selectedLevel.value = '';
+    selectedTopic.value = '';
+    selectedConcept.value = '';
+    selectedDifficulty.value = '';
+  } catch (e) {
+    alert('新增失敗：' + e.message);
+  }
 }
+const router = useRouter();
 function goToQuestionBank() {
-  alert('跳轉至題庫頁（預留）');
+  // 嘗試使用 router（若路由已註冊 /question），否則 fallback 到直接導向
+  try {
+    if (router && router.push) {
+      router.push('/question');
+      return;
+    }
+  } catch (_) {}
+  window.location.href = '/questions';
 }
 </script>
 

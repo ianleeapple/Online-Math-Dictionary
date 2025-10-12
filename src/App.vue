@@ -9,6 +9,9 @@
         <router-link to="/quiz/create">建立測驗</router-link>
         <router-link to="/quiz/records">測驗紀錄</router-link>
         <router-link to="/class-group">班級群組</router-link>
+        <!-- 老師身分選單 -->
+        <router-link v-if="isTeacher" to="/add-question">新增題目</router-link>
+        <router-link v-if="isTeacher" to="/question">檢視題庫</router-link>
         <button class="logout-btn" @click="logout">登出</button>
       </template>
       
@@ -28,11 +31,23 @@ import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const isLoggedIn = ref(false);
+// 判斷是否為老師身分
+const isTeacher = ref(false);
 
 // 檢查登入狀態
 function checkLoginStatus() {
   const currentUser = localStorage.getItem('currentUser');
   isLoggedIn.value = !!currentUser;
+  if (currentUser) {
+    try {
+      const user = JSON.parse(currentUser);
+      isTeacher.value = user.role === '老師';
+    } catch {
+      isTeacher.value = false;
+    }
+  } else {
+    isTeacher.value = false;
+  }
 }
 
 // 登出功能
@@ -42,6 +57,7 @@ function logout() {
     localStorage.removeItem('currentUser');
     // 更新登入狀態
     isLoggedIn.value = false;
+    isTeacher.value = false;
     // 跳轉到首頁
     router.push('/');
     alert('已成功登出');
