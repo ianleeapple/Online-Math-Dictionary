@@ -501,7 +501,13 @@ router.post('/ai/generate', async (req, res) => {
             if (typeof obj === 'string') {
               let result = obj;
               latexFormulas.forEach((formula, index) => {
-                result = result.replace(`__LATEX_FORMULA_${index}__`, formula);
+                // 將雙反斜線 \\( 和 \\) 轉換為單反斜線 \( 和 \)
+                // 這樣 MathJax 才能正確識別
+                const cleanedFormula = formula
+                  .replace(/\\\\\(/g, '\\(')  // \\( → \(
+                  .replace(/\\\\\)/g, '\\)'); // \\) → \)
+                
+                result = result.replace(`__LATEX_FORMULA_${index}__`, cleanedFormula);
               });
               return result;
             } else if (Array.isArray(obj)) {
@@ -518,6 +524,9 @@ router.post('/ai/generate', async (req, res) => {
           
           const restoredResult = restoreLatex(parsedResult);
           console.log('[JSON 修復] 成功修復並解析');
+          console.log('[JSON 修復] LaTeX 公式示例:', 
+            JSON.stringify(restoredResult).substring(0, 300).match(/\\\([^)]*\\\)/g) || '無公式'
+          );
           return res.json(restoredResult);
         }
       } catch (fixError) {
