@@ -84,7 +84,7 @@ async function onLogin() {
       return;
     }
     
-    alert(`登入成功！歡迎 ${data.user.name}，正在跳轉到個人資料頁面...`);
+    alert(`登入成功！歡迎 ${data.user.name}`);
     
     // 將使用者資訊儲存到 localStorage
     localStorage.setItem('currentUser', JSON.stringify(data.user));

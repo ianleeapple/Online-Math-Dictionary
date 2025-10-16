@@ -54,3 +54,20 @@ CREATE TABLE IF NOT EXISTS achievement (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
+
+-- 存放題目資料表 (question)
+CREATE TABLE IF NOT EXISTS question (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  level ENUM('國中','高中') NOT NULL,
+  topic VARCHAR(100) NOT NULL,
+  concept VARCHAR(100) NOT NULL,
+  content TEXT NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  options JSON NULL,
+  answer TEXT NULL,
+  mode VARCHAR(50) NULL,
+  difficulty VARCHAR(50) NULL,
+  created_by INT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
