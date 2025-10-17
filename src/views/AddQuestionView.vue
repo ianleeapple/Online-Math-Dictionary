@@ -63,18 +63,6 @@
         </select>
       </div>
 
-      <!-- 單選/多選題選項 -->
-      <div class="form-group" v-if="newQuestion.type === 'single' || newQuestion.type === 'multiple'">
-        <label>選項</label>
-        <div v-for="(opt, idx) in newQuestion.options" :key="idx" class="options">
-          <input v-model="newQuestion.options[idx]" placeholder="請輸入選項" />
-          <button class="btn" @click="removeOption(idx)" style="padding:6px 10px; margin-left:6px;">刪除</button>
-        </div>
-        <div class="btn-row" style="margin-top:8px;">
-          <button class="btn" @click="addOption">新增選項</button>
-        </div>
-      </div>
-
       <!-- 難易度選單 -->
       <div class="form-group">
         <label><h3>難易度</h3></label>
@@ -82,20 +70,6 @@
           <option disabled value="">請選擇難易度</option>
           <option v-for="level in difficulties" :key="level" :value="level">{{ level }}</option>
         </select>
-      </div>
-
-      <!-- 題目加入方式 -->
-      <div class="form-group radio-group">
-        <div class="radio-row">
-          <label class="radio-option">
-            <input type="radio" value="only" v-model="newQuestion.mode" required />
-            <span>僅加入此題</span>
-          </label>
-          <label class="radio-option">
-            <input type="radio" value="withSimilar" v-model="newQuestion.mode" required />
-            <span>加入此題並允許自動產生類題</span>
-          </label>
-        </div>
       </div>
 
       <!-- 底部按鈕 -->
@@ -139,9 +113,7 @@ const selectedDifficulty = ref('')
 const newQuestion = ref({
   text: '',
   type: 'single',
-  options: [],
   answer: '',
-  mode: '',
   imageFile: null,
   imagePreview: null,
 });
@@ -166,12 +138,6 @@ watch(selectedTopic, () => {
   selectedConcept.value = '';
 });
 
-function addOption() {
-  newQuestion.value.options.push('');
-}
-function removeOption(index) {
-  newQuestion.value.options.splice(index, 1);
-}
 function handleImageUpload(event) {
   const file = event.target.files[0];
   if (file) {
@@ -191,41 +157,19 @@ function removeImage() {
 async function addQuestion() {
   if (!selectedLevel.value) return alert('請選擇範圍');
   if (!newQuestion.value.text.trim()) return alert('請輸入題目內容');
-  if (!newQuestion.value.mode) return alert('請選擇加入方式');
   if (!selectedTopic.value) return alert('請選擇主題');
   if (!selectedConcept.value) return alert('請選擇觀念');
   if (!selectedDifficulty.value) return alert('請選擇難易度');
 
-  // 取得目前登入使用者（若有）
-  const currentUser = localStorage.getItem('currentUser');
-  let userId = null;
-  if (currentUser) {
-    try {
-      userId = JSON.parse(currentUser).id;
-    } catch { userId = null; }
-  }
-
-  const payload = {
-    level: selectedLevel.value,
-    topic: selectedTopic.value,
-    concept: selectedConcept.value,
-    content: newQuestion.value.text,
-    type: newQuestion.value.type,
-    options: newQuestion.value.options,
-    answer: newQuestion.value.answer,
-    mode: newQuestion.value.mode,
-    difficulty: selectedDifficulty.value,
-    user_id: userId
-  };
-
   const formData = new FormData();
-  Object.entries(payload).forEach(([key, value]) => {
-    if (key === 'options') {
-      formData.append(key, JSON.stringify(value));
-    } else {
-      formData.append(key, value);
-    }
-  });
+  
+  formData.append('level', selectedLevel.value);
+  formData.append('topic', selectedTopic.value);
+  formData.append('concept', selectedConcept.value);
+  formData.append('content', newQuestion.value.text);
+  formData.append('type', newQuestion.value.type);
+  formData.append('answer', newQuestion.value.answer || '');
+  formData.append('difficulty', selectedDifficulty.value);
   
   if (newQuestion.value.imageFile) {
     formData.append('image', newQuestion.value.imageFile);
@@ -241,10 +185,16 @@ async function addQuestion() {
       throw new Error(data.message || '新增題目失敗');
     }
 
-    alert('題目已新增（已存入資料庫）');
-
-    // reset
-    newQuestion.value = { text: '', type: 'single', options: [], answer: '', mode: '' };
+    alert('題目新增成功！');
+    
+    // 重置表單
+    newQuestion.value = {
+      text: '',
+      type: 'single',
+      answer: '',
+      imageFile: null,
+      imagePreview: null
+    };
     selectedLevel.value = '';
     selectedTopic.value = '';
     selectedConcept.value = '';
@@ -309,20 +259,6 @@ h2 { margin-bottom: 20px; }
   font-size: 14px;
 }
 .btn:hover { background-color: #c06565; }
-.options { margin-top: 5px; }
-.radio-group { margin: 10px 0 0; }
-.radio-row {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.radio-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
 .btn-row {
   display: flex;
   gap: 10px;

@@ -42,39 +42,33 @@
       <div v-if="loading">載入中...</div>
       <div v-else>
         <div v-if="questions.length === 0">目前無符合的題目，請調整篩選條件。</div>
-        <div v-for="q in questions" :key="q.id" class="question-card" style="margin-top:12px; padding:12px; border-radius:8px; border:1px solid #e0e6ea;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <strong>#{{ q.id }}</strong>
-              <span style="margin-left:8px; color:#666;">[{{ q.level }}] {{ q.topic }} / {{ q.concept }}</span>
-            </div>
-            <div style="color:#999; font-size:12px;">{{ formatDate(q.created_at) }}</div>
-          </div>
-
-          <div style="margin-top:8px; white-space:pre-wrap;">{{ q.content }}</div>
-          
-          <!-- 題目圖片 -->
-          <div v-if="q.image_url" class="question-image">
-            <img :src="q.image_url" alt="題目圖片" />
-          </div>
-
-          <div v-if="q.options && q.type !== 'fill'" style="margin-top:8px;">
-            <div v-for="(opt, idx) in q.options" :key="idx" style="padding:6px 8px; background:#fafafa; border-radius:6px; margin-top:6px;">
-              <strong>{{ optionLabel(idx) }}.</strong> {{ opt }}
-            </div>
-          </div>
-
-          <div style="margin-top:8px; color:#2d2d2d;">
-            <strong>答案：</strong>
-            <span v-if="q.answer">{{ q.answer }}</span>
-            <span v-else style="color:#999;">未提供</span>
-          </div>
-
-          <div style="margin-top:8px; display:flex; gap:8px;">
-            <button class="btn" @click="copyQuestion(q)">複製題目內容</button>
-            <button class="btn" @click="viewRaw(q)">顯示原始</button>
-          </div>
-        </div>
+        <table v-else class="question-table">
+          <thead>
+            <tr>
+              <th>編號</th>
+              <th>範圍</th>
+              <th>主題/觀念</th>
+              <th>題目內容</th>
+              <th>答案</th>
+              <th>難易度</th>
+              <th>建立時間</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="q in questions" :key="q.id">
+              <td>#{{ q.id }}</td>
+              <td>{{ q.level }}</td>
+              <td>{{ q.topic }}<br/>{{ q.concept }}</td>
+              <td>
+                {{ q.content }}
+                <img v-if="q.image_url" :src="q.image_url" class="question-thumbnail"/>
+              </td>
+              <td>{{ q.answer }}</td>
+              <td>{{ q.difficulty }}</td>
+              <td>{{ formatDate(q.created_at) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -144,31 +138,18 @@ async function fetchQuestions() {
   loading.value = true;
   try {
     const q = buildQueryParams();
-    const res = await fetch('/api/questions?' + q);
+    const res = await fetch('/api/question?' + q);
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || '無法取得題目');
 
-    // 假設後端回傳陣列，且 options 為 JSON 字串或已為陣列
-    questions.value = data.map(item => {
-      // 嘗試處理 options 欄位
-      const copy = { ...item };
-      try {
-        if (typeof copy.options === 'string') {
-          copy.options = JSON.parse(copy.options);
-        }
-      } catch { /* leave as-is */ }
-      return copy;
-    });
+    // 已移除選項處理的邏輯，直接使用回傳資料
+    questions.value = data;
   } catch (e) {
     alert('取得題目失敗：' + e.message);
     questions.value = [];
   } finally {
     loading.value = false;
   }
-}
-
-function optionLabel(idx) {
-  return String.fromCharCode(65 + idx);
 }
 
 function copyQuestion(q) {
@@ -240,20 +221,6 @@ h2 { margin-bottom: 20px; }
 }
 .btn:hover { background-color: #c06565; }
 
-.options { margin-top: 6px; }
-.radio-group { margin: 10px 0 0; }
-.radio-row {
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.radio-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
 .btn-row {
   display: flex;
   gap: 12px;
@@ -276,5 +243,28 @@ h2 { margin-bottom: 20px; }
   max-width: 100%;
   max-height: 300px;
   border-radius: 6px;
+}
+
+/* 新增題目表格樣式 */
+.question-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+.question-table th,
+.question-table td {
+  padding: 12px;
+  border: 1px solid #e0e6ea;
+  text-align: left;
+}
+.question-table th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+.question-thumbnail {
+  max-width: 100px;
+  max-height: 100px;
+  border-radius: 4px;
+  margin-top: 8px;
 }
 </style>
