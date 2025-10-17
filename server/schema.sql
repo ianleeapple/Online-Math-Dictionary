@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS question (
   topic VARCHAR(100) NOT NULL,
   concept VARCHAR(100) NOT NULL,
   content TEXT NOT NULL,
+  image_url VARCHAR(255) NULL,  -- 新增圖片URL欄位
   type VARCHAR(50) NOT NULL,
   options JSON NULL,
   answer TEXT NULL,

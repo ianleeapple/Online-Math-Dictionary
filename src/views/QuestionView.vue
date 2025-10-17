@@ -52,6 +52,11 @@
           </div>
 
           <div style="margin-top:8px; white-space:pre-wrap;">{{ q.content }}</div>
+          
+          <!-- 題目圖片 -->
+          <div v-if="q.image_url" class="question-image">
+            <img :src="q.image_url" alt="題目圖片" />
+          </div>
 
           <div v-if="q.options && q.type !== 'fill'" style="margin-top:8px;">
             <div v-for="(opt, idx) in q.options" :key="idx" style="padding:6px 8px; background:#fafafa; border-radius:6px; margin-top:6px;">
@@ -262,5 +267,14 @@ h2 { margin-bottom: 20px; }
   border-radius: 8px;
   margin-top: 12px;
   box-sizing: border-box;
+}
+
+.question-image {
+  margin: 16px 0;
+}
+.question-image img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 6px;
 }
 </style>
