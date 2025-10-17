@@ -38,6 +38,21 @@
         <textarea v-model="newQuestion.text" rows="3" placeholder="請輸入題目"></textarea>
       </div>
 
+      <!-- 新增：題目附圖 -->
+      <div class="form-group">
+        <label><h3>題目附圖（選填）</h3></label>
+        <input 
+          type="file" 
+          @change="handleImageUpload" 
+          accept=".png,.jpg,.jpeg"
+          ref="fileInput"
+        />
+        <div v-if="newQuestion.imagePreview" class="image-preview">
+          <img :src="newQuestion.imagePreview" alt="預覽圖" />
+          <button class="btn remove-btn" @click="removeImage">移除圖片</button>
+        </div>
+      </div>
+
       <!-- 題型選單 -->
       <div class="form-group">
         <label><h3>題型</h3></label>
@@ -126,7 +141,9 @@ const newQuestion = ref({
   type: 'single',
   options: [],
   answer: '',
-  mode: ''
+  mode: '',
+  imageFile: null,
+  imagePreview: null,
 });
 
 // topics 由 selectedLevel 計算
@@ -154,6 +171,22 @@ function addOption() {
 }
 function removeOption(index) {
   newQuestion.value.options.splice(index, 1);
+}
+function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (file) {
+    if (file.size > 5 * 1024 * 1024) {
+      alert('圖片大小不能超過 5MB');
+      return;
+    }
+    newQuestion.value.imageFile = file;
+    newQuestion.value.imagePreview = URL.createObjectURL(file);
+  }
+}
+function removeImage() {
+  newQuestion.value.imageFile = null;
+  newQuestion.value.imagePreview = null;
+  if (fileInput.value) fileInput.value.value = '';
 }
 async function addQuestion() {
   if (!selectedLevel.value) return alert('請選擇範圍');
@@ -185,11 +218,23 @@ async function addQuestion() {
     user_id: userId
   };
 
+  const formData = new FormData();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (key === 'options') {
+      formData.append(key, JSON.stringify(value));
+    } else {
+      formData.append(key, value);
+    }
+  });
+  
+  if (newQuestion.value.imageFile) {
+    formData.append('image', newQuestion.value.imageFile);
+  }
+
   try {
-    const res = await fetch('/api/questions', {
+    const res = await fetch('/api/question', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: formData
     });
     const data = await res.json();
     if (!res.ok) {
@@ -283,5 +328,20 @@ h2 { margin-bottom: 20px; }
   gap: 10px;
   align-items: center;
   margin-top: 12px;
+}
+.image-preview {
+  margin-top: 10px;
+  position: relative;
+}
+.image-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 6px;
+}
+.remove-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(255,0,0,0.7);
 }
 </style>
