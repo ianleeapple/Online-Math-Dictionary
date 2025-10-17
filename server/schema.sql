@@ -62,11 +62,10 @@ CREATE TABLE IF NOT EXISTS question (
   topic VARCHAR(100) NOT NULL,
   concept VARCHAR(100) NOT NULL,
   content TEXT NOT NULL,
-  image_url VARCHAR(255) NULL,  -- 新增圖片URL欄位
+  image_url VARCHAR(255) NULL,
   type VARCHAR(50) NOT NULL,
-  options JSON NULL,
+  options JSON NULL,      -- 保留欄位，現在選項會包含在 content 中
   answer TEXT NULL,
-  mode VARCHAR(50) NULL,
   difficulty VARCHAR(50) NULL,
   created_by INT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
