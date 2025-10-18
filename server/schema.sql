@@ -63,11 +63,8 @@ CREATE TABLE IF NOT EXISTS question (
   concept VARCHAR(100) NOT NULL,
   content TEXT NOT NULL,
   image_url VARCHAR(255) NULL,
-  type VARCHAR(50) NOT NULL,
-  options JSON NULL,      -- 保留欄位，現在選項會包含在 content 中
+  type ENUM('single', 'multiple', 'fill') NOT NULL,
   answer TEXT NULL,
-  difficulty VARCHAR(50) NULL,
-  created_by INT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  difficulty ENUM('容易', '中等', '困難', '魔王') NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
