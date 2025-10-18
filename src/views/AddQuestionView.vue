@@ -162,7 +162,6 @@ async function addQuestion() {
   if (!selectedDifficulty.value) return alert('請選擇難易度');
 
   const formData = new FormData();
-  
   formData.append('level', selectedLevel.value);
   formData.append('topic', selectedTopic.value);
   formData.append('concept', selectedConcept.value);
