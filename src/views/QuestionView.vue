@@ -33,7 +33,6 @@
 
       <div class="btn-row" style="margin-top:8px;">
         <button class="btn" @click="fetchQuestions">搜尋題目</button>
-        <!-- 已移除重設選擇按鈕 -->
       </div>
     </div>
 
@@ -45,10 +44,11 @@
         <table v-else class="question-table">
           <thead>
             <tr>
-              <th>編號</th>
               <th>範圍</th>
-              <th>主題/觀念</th>
+              <th>主題</th>
+              <th>觀念</th>
               <th>題目內容</th>
+              <th>題目附圖</th>
               <th>答案</th>
               <th>難易度</th>
               <th>建立時間</th>
@@ -56,12 +56,13 @@
           </thead>
           <tbody>
             <tr v-for="q in questions" :key="q.id">
-              <td>#{{ q.id }}</td>
               <td>{{ q.level }}</td>
-              <td>{{ q.topic }}<br/>{{ q.concept }}</td>
+              <td>{{ q.topic }}</td>
+              <td>{{ q.concept }}</td>
+              <td>{{ q.content }}</td>
               <td>
-                {{ q.content }}
-                <img v-if="q.image_url" :src="q.image_url" class="question-thumbnail"/>
+                <span v-if="q.image_url">有</span>
+                <span v-else>無</span>
               </td>
               <td>{{ q.answer }}</td>
               <td>{{ q.difficulty }}</td>
@@ -128,10 +129,7 @@ function buildQueryParams() {
 }
 
 async function fetchQuestions() {
-  // 必要條件：至少選一個範圍與主題與觀念（依需求可調）
   if (!selectedLevel.value || !selectedTopic.value || !selectedConcept.value) {
-    // 允許使用者只用範圍或主題搜尋也可以，把這裡改為提示或允許
-    // 目前要求三者齊全
     return alert('請先選擇範圍、主題與觀念以進行搜尋');
   }
 
@@ -139,11 +137,26 @@ async function fetchQuestions() {
   try {
     const q = buildQueryParams();
     const res = await fetch('/api/question?' + q);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || '無法取得題目');
+    
+    const rawText = await res.text();
+    
+    if (rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+      throw new Error('伺服器回傳 HTML 而非 JSON，可能後端服務未正確啟動');
+    }
+    
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseError) {
+      throw new Error('伺服器回應格式錯誤');
+    }
+    
+    if (!res.ok) {
+      throw new Error(data.message || '無法取得題目');
+    }
 
-    // 已移除選項處理的邏輯，直接使用回傳資料
-    questions.value = data;
+    questions.value = Array.isArray(data) ? data : [];
+    
   } catch (e) {
     alert('取得題目失敗：' + e.message);
     questions.value = [];
@@ -250,17 +263,62 @@ h2 { margin-bottom: 20px; }
   width: 100%;
   border-collapse: collapse;
   margin-top: 16px;
+  table-layout: fixed;
 }
 .question-table th,
 .question-table td {
   padding: 12px;
   border: 1px solid #e0e6ea;
-  text-align: left;
+  text-align: center;
+  word-wrap: break-word;
 }
 .question-table th {
   background-color: #f2f2f2;
   font-weight: bold;
 }
+
+/* 設定各欄位寬度 */
+.question-table th:nth-child(1),
+.question-table td:nth-child(1) {
+  width: 8%;
+}
+.question-table th:nth-child(2),
+.question-table td:nth-child(2) {
+  width: 10%;
+}
+.question-table th:nth-child(3),
+.question-table td:nth-child(3) {
+  width: 12%;
+}
+.question-table th:nth-child(4) {
+  width: 30%;
+  text-align: center;
+}
+.question-table td:nth-child(4) {
+  width: 30%;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  text-align: left;
+}
+.question-table th:nth-child(5),
+.question-table td:nth-child(5) {
+  width: 8%;
+}
+.question-table th:nth-child(6),
+.question-table td:nth-child(6) {
+  width: 12%;
+}
+.question-table th:nth-child(7),
+.question-table td:nth-child(7) {
+  width: 8%;
+}
+.question-table th:nth-child(8),
+.question-table td:nth-child(8) {
+  width: 12%;
+}
+
 .question-thumbnail {
   max-width: 100px;
   max-height: 100px;
