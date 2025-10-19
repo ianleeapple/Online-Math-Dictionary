@@ -104,6 +104,69 @@ router.post('/quizzes', async (req, res) => {
   }
 });
 
+// 新增題目
+router.post('/questions', async (req, res) => {
+  const { level, topic, concept, content, type, options, answer, mode, difficulty, user_id } = req.body;
+  
+  try {
+    const [result] = await pool.query(
+      'INSERT INTO question (level, topic, concept, content, type, options, answer, mode, difficulty, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [level, topic, concept, content, type, JSON.stringify(options), answer, mode, difficulty, user_id]
+    );
+    
+    res.status(201).json({ 
+      message: '題目新增成功',
+      id: result.insertId,
+      level,
+      topic,
+      concept,
+      content,
+      type,
+      difficulty
+    });
+  } catch (error) {
+    console.error('新增題目失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+
+// 取得題目列表
+router.get('/questions', async (req, res) => {
+  const { level, topic, concept, difficulty, type } = req.query;
+  
+  try {
+    let query = 'SELECT * FROM question WHERE 1=1';
+    const params = [];
+    
+    if (level) {
+      query += ' AND level = ?';
+      params.push(level);
+    }
+    if (topic) {
+      query += ' AND topic = ?';
+      params.push(topic);
+    }
+    if (concept) {
+      query += ' AND concept = ?';
+      params.push(concept);
+    }
+    if (difficulty) {
+      query += ' AND difficulty = ?';
+      params.push(difficulty);
+    }
+    if (type) {
+      query += ' AND type = ?';
+      params.push(type);
+    }
+    
+    const [rows] = await pool.query(query, params);
+    res.json(rows);
+  } catch (error) {
+    console.error('查詢題目失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+
 // 刪除使用者
 router.delete('/users/:id', async (req, res) => {
   const { id } = req.params;
