@@ -10,6 +10,21 @@
         <p>{{ item.description }}</p>
         <button class="btn" @click="navigate(item.action)">{{ item.button }}</button>
       </div>
+      
+      <!-- 老師專用區塊 -->
+      <template v-if="isTeacher">
+        <div class="section">
+          <h2>新增題目</h2>
+          <p>建立新的數學題目，充實題庫內容，供學生練習使用。</p>
+          <button class="btn" @click="navigate('add-question')">新增題目</button>
+        </div>
+        
+        <div class="section">
+          <h2>檢視題庫</h2>
+          <p>瀏覽、編輯或刪除已建立的題目，管理題庫內容。</p>
+          <button class="btn" @click="navigate('view-question')">檢視題庫</button>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -19,6 +34,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
+const isTeacher = ref(false);
 
 const items = ref([
   {
@@ -48,6 +64,9 @@ const items = ref([
 ]);
 
 onMounted(async () => {
+  // 呼叫檢查使用者身分
+  checkUserRole();
+  
   try {
     // 取得所有用戶
     const usersRes = await fetch('/api/users');
@@ -58,14 +77,24 @@ onMounted(async () => {
     // 取得所有成就
     const achievementsRes = await fetch('/api/achievements');
     const achievements = await achievementsRes.json();
-    // 動態顯示統計數量（可依需求調整顯示位置與內容）
-    items.value[0].description;
-    items.value[2].description;
-    items.value[0].description;
   } catch (e) {
     console.error('API 請求失敗', e);
   }
 });
+
+// 檢查使用者身分
+function checkUserRole() {
+  const currentUser = localStorage.getItem('currentUser');
+  if (currentUser) {
+    try {
+      const user = JSON.parse(currentUser);
+      isTeacher.value = user.role === '老師';
+    } catch (e) {
+      console.error('解析使用者資料失敗:', e);
+      isTeacher.value = false;
+    }
+  }
+}
 
 // 新增：簡單的登入判斷（可改為檢查 cookie / store / API）
 function isAuthenticated() {
@@ -81,10 +110,12 @@ function navigate(action) {
 
   // 對應 action 到實際路由
   const routeMap = {
-    account: '/profile',       // 管理帳號 -> 個人檔案頁面
-    class: '/class-group',     // 查看班級 -> 班級群組頁面
-    exam: '/quiz/create',      // 建立測驗 -> 建立測驗頁面
-    records: 'quiz/records'    // 查看紀錄 -> 測驗紀錄頁面
+    account: '/profile',                // 管理帳號 -> 個人檔案頁面
+    class: '/class-group',              // 查看班級 -> 班級群組頁面
+    exam: '/quiz/create',               // 建立測驗 -> 建立測驗頁面
+    records: '/quiz/records',           // 查看紀錄 -> 測驗紀錄頁面
+    'add-question': '/add-question',    // 新增題目
+    'view-question': '/question'        // 檢視題庫
   };
   const path = routeMap[action] || '/';
   router.push(path);
