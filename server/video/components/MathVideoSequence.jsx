@@ -44,14 +44,29 @@ export const MathVideoSequence = ({ question, script, style, options, audioTimel
   let currentFrame = 0;
   const sceneFrames = React.useMemo(() => {
     let currentFrame = 0;
+    let cumulativeStepCount = 0; // 累積步驟數
+    
     const frames = scenes.map((scene, index) => {
       const duration = scene.duration || 3;
       const frameCount = Math.ceil(duration * fps);  // 使用 ceil 確保不會遺漏幀數
+      
+      // 計算此場景的步驟起始編號
+      const startStepNumber = cumulativeStepCount;
+      
+      // 如果是步驟場景,計算步驟數量並累加
+      const baseType = scene.type.replace(/-\d+$/, '');
+      if (baseType === 'steps') {
+        const content = scene.visualContent || scene.content || scene.narrative || '';
+        const stepCount = content.split('\n').filter(Boolean).length;
+        cumulativeStepCount += stepCount;
+      }
+      
       const result = {
         ...scene,
         startFrame: currentFrame,
         endFrame: currentFrame + frameCount,
         durationInFrames: frameCount,
+        startStepNumber, // 添加起始步驟編號
       };
       currentFrame += frameCount;
       return result;
@@ -129,7 +144,10 @@ const SceneComponent = ({ scene, style, width, height, fps }) => {
 
   // 根據場景類型渲染不同內容
   const renderSceneContent = () => {
-    switch (scene.type) {
+    // 提取場景的基礎類型(去除數字後綴 -2, -3 等)
+    const baseType = scene.type.replace(/-\d+$/, '');
+    
+    switch (baseType) {
       case 'question':
         return <QuestionScene scene={scene} style={style} />;
       case 'analysis':
@@ -156,26 +174,16 @@ const SceneComponent = ({ scene, style, width, height, fps }) => {
  * 題目場景
  */
 const QuestionScene = ({ scene, style }) => {
-  const frame = useCurrentFrame();
-  
   // 使用統一內容提取函數
   const content = getSceneContent(scene);
-  
-  // 打字機效果
-  const textProgress = interpolate(frame, [0, 60], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  
-  const displayedText = content.substring(0, Math.floor(content.length * textProgress));
 
   return (
-    <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column' }}>
       <div style={getTitleStyle(style)}>
-        {scene.title}
+        題目
       </div>
-      <div style={getContentStyle(style)}>
-        <MathRenderer content={displayedText} />
+      <div style={{ ...getContentStyle(style), flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <MathRenderer content={content} />
       </div>
     </AbsoluteFill>
   );
@@ -189,11 +197,11 @@ const AnalysisScene = ({ scene, style }) => {
   const content = getSceneContent(scene);
   
   return (
-    <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column' }}>
       <div style={getTitleStyle(style)}>
-        {scene.title}
+        概念解析
       </div>
-      <div style={getContentStyle(style)}>
+      <div style={{ ...getContentStyle(style), flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <MathRenderer content={content} />
       </div>
     </AbsoluteFill>
@@ -213,9 +221,9 @@ const ConceptScene = ({ scene, style }) => {
   return (
     <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <div style={getTitleStyle(style)}>
-        {scene.title}
+        解題概念
       </div>
-      <div style={getListStyle(style)}>
+      <div style={{ ...getListStyle(style), flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         {concepts.map((concept, index) => {
           const showFrame = index * 30; // 每 1 秒顯示一個概念
           const opacity = interpolate(frame, [showFrame, showFrame + 15], [0, 1], {
@@ -223,9 +231,13 @@ const ConceptScene = ({ scene, style }) => {
             extrapolateRight: 'clamp',
           });
           
+          // 檢查概念是否已經包含編號(例如 "1. " 或 "一、")
+          const hasNumber = /^[\d一二三四五六七八九十]+[、.)]/.test(concept);
+          const displayContent = hasNumber ? concept : `${index + 1}. ${concept}`;
+          
           return (
             <div key={index} style={{ ...getListItemStyle(style), opacity }}>
-              <MathRenderer content={`${index + 1}. ${concept}`} />
+              <MathRenderer content={displayContent} />
             </div>
           );
         })}
@@ -244,12 +256,15 @@ const StepsScene = ({ scene, style }) => {
   const content = getSceneContent(scene);
   const steps = content.split('\n').filter(Boolean);
   
+  // 獲取起始步驟編號 (用於步驟延續編號)
+  const startStepNumber = scene.startStepNumber || 0;
+  
   return (
-    <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column' }}>
+    <AbsoluteFill style={{ padding: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       <div style={getTitleStyle(style)}>
-        {scene.title}
+        詳細步驟
       </div>
-      <div style={getListStyle(style)}>
+      <div style={{ ...getListStyle(style), flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         {steps.map((step, index) => {
           const showFrame = index * 40; // 每 1.33 秒顯示一個步驟
           const opacity = interpolate(frame, [showFrame, showFrame + 20], [0, 1], {
@@ -263,6 +278,12 @@ const StepsScene = ({ scene, style }) => {
             extrapolateRight: 'clamp',
           });
           
+          // 移除內容中的 "步驟 X:" 或 "步驟X:" 前綴
+          const cleanStep = step.replace(/^步驟\s*\d+\s*[:：]\s*/, '');
+          
+          // 使用累積編號
+          const stepNumber = startStepNumber + index + 1;
+          
           return (
             <div 
               key={index} 
@@ -275,7 +296,7 @@ const StepsScene = ({ scene, style }) => {
                 marginBottom: '15px'
               }}
             >
-              <MathRenderer content={`${index + 1}. ${step}`} />
+              <MathRenderer content={`${stepNumber}. ${cleanStep}`} />
             </div>
           );
         })}
