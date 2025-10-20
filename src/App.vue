@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div id="app">
     <nav class="main-nav">
       <router-link to="/">首頁</router-link>
       
@@ -21,7 +21,9 @@
         <router-link to="/register">註冊</router-link>
       </template>
     </nav>
-    <router-view />
+    <div class="content-wrapper">
+      <router-view />
+    </div>
   </div>
 </template>
 
@@ -78,17 +80,44 @@ window.addEventListener('storage', (e) => {
 </script>
 
 <style scoped>
-.logout-btn {
-  background: none;
-  border: none;
-  color: #333;
-  font-weight: bold;
-  cursor: pointer;
-  transition: color 0.2s;
-  font-size: inherit;
-  padding: 0;
-}
-.logout-btn:hover {
-  color: #d67b7b;
-}
+  .main-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 15px 20px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    z-index: 1000;
+  }
+  .main-nav a {
+    text-decoration: none;
+    color: #333;
+    font-weight: bold;
+    transition: color 0.2s;
+  }
+  .main-nav a:hover,
+  .main-nav a.router-link-active {
+    color: #d67b7b;
+  }
+  .logout-btn {
+    background: none;
+    border: none;
+    color: #333;
+    font-weight: bold;
+    cursor: pointer;
+    transition: color 0.2s;
+    font-size: inherit;
+    padding: 0;
+  }
+  .logout-btn:hover {
+    color: #d67b7b;
+  }
+  /* 為頁面內容增加上方間距，避免被導覽列遮擋 */
+  .content-wrapper {
+    padding-top: 50px;
+  }
 </style>
