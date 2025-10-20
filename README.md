@@ -25,6 +25,7 @@
 - **Node.js + Express**: 伺服器框架
 - **MySQL**: 主資料庫
 - **bcrypt**: 密碼雜湊加密
+- **Multer**: 檔案上傳處理
 
 ### AI 相關
 - **Google Gemini 2.5 Flash**: AI 智能題目生成
@@ -138,6 +139,36 @@ npm run studio
 - 🔊 **語音旁白**: AI 生成的中文語音
 
 ### API 端點
+
+**題目管理**:
+```http
+# 新增題目 (支援圖片上傳)
+POST /api/questions
+Content-Type: multipart/form-data
+{
+  "topic": "主題",
+  "concept": "觀念",
+  "difficulty": "難易度",
+  "content": "題目內容",
+  "options": ["選項1", "選項2", "選項3", "選項4"],
+  "answer": "正確答案",
+  "image": File (可選)
+}
+
+# 取得所有題目
+GET /api/questions
+
+# 取得特定題目
+GET /api/questions/:id
+
+# 更新題目
+PUT /api/questions/:id
+
+# 刪除題目
+DELETE /api/questions/:id
+```
+
+**影片生成**:
 ```http
 # 生成影片
 POST /api/video/generate
@@ -343,6 +374,7 @@ Online-Math-Dictionary/
 │   │   ├── VideoGenerator.js   # 影片生成器
 │   │   ├── components/         # Remotion 元件
 │   │   └── package.json        # Remotion 依賴
+│   ├── uploads/                # 檔案上傳目錄 (gitignore)
 │   ├── output/                 # 生成的影片輸出 (gitignore)
 │   └── temp/                   # 暫存檔案 (gitignore)
 ├── .github/                    # GitHub 設定

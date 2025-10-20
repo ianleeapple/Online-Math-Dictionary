@@ -4,6 +4,17 @@ const pool = require('./db');
 const { hashPassword, verifyPassword } = require('./auth');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
+
+// 設定檔案上傳
+const storage = multer.diskStorage({
+  destination: './uploads/',
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage });
 
 // 取得所有使用者
 router.get('/users', async (req, res) => {
@@ -104,34 +115,44 @@ router.post('/quizzes', async (req, res) => {
   }
 });
 
-// 新增題目
-router.post('/questions', async (req, res) => {
-  const { level, topic, concept, content, type, options, answer, mode, difficulty, user_id } = req.body;
-  
+// 新增題目 API
+router.post('/question', upload.single('image'), async (req, res) => {
   try {
-    const [result] = await pool.query(
-      'INSERT INTO question (level, topic, concept, content, type, options, answer, mode, difficulty, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [level, topic, concept, content, type, JSON.stringify(options), answer, mode, difficulty, user_id]
+    const { level, topic, concept, content, type, difficulty, answer } = req.body;
+    if (!level || !topic || !concept || !content || !type || !difficulty) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要欄位'
+      });
+    }
+    // 確保上傳目錄存在
+    if (!fs.existsSync('./uploads')) {
+      fs.mkdirSync('./uploads', { recursive: true });
+    }
+    const image_url = req.file ? `/uploads/${req.file.filename}` : null;
+    const [result] = await pool.execute(
+      `INSERT INTO question (level, topic, concept, content, image_url, type, answer, difficulty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [level, topic, concept, content, image_url, type, answer || null, difficulty]
     );
-    
-    res.status(201).json({ 
+
+    res.json({
+      success: true,
       message: '題目新增成功',
-      id: result.insertId,
-      level,
-      topic,
-      concept,
-      content,
-      type,
-      difficulty
+      id: result.insertId
     });
-  } catch (error) {
-    console.error('新增題目失敗:', error);
-    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+
+  } catch (err) {
+    console.error('新增題目失敗:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || '新增題目失敗'
+    });
   }
 });
 
 // 取得題目列表
-router.get('/questions', async (req, res) => {
+router.get('/question', async (req, res) => {
   const { level, topic, concept, difficulty, type } = req.query;
   
   try {
@@ -161,9 +182,13 @@ router.get('/questions', async (req, res) => {
     
     const [rows] = await pool.query(query, params);
     res.json(rows);
+    
   } catch (error) {
     console.error('查詢題目失敗:', error);
-    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+    res.status(500).json({ 
+      message: '資料庫錯誤', 
+      error: error.message 
+    });
   }
 });
 
@@ -580,7 +605,7 @@ router.post('/ai/generate', async (req, res) => {
               for (const key in obj) {
                 restored[key] = restoreLatex(obj[key]);
               }
-              return restored;
+              return obj;
             }
             return obj;
           };

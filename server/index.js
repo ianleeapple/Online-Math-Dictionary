@@ -1,8 +1,15 @@
 // Express 伺服器主程式
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const routes = require('./routes');
+
 const app = express();
-const port = 3001;
+
+// 中介軟體
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // 全域錯誤處理
 process.on('uncaughtException', (err) => {
@@ -15,27 +22,23 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-app.use(cors());
-app.use(express.json());
+// 靜態檔案服務
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// 範例 API
-app.get('/api/hello', (req, res) => {
-  res.json({ message: 'Hello from Express API!' });
-});
-
-const routes = require('./routes');
+// API 路由
 app.use('/api', routes);
 
-// 錯誤處理中間件
+// 錯誤處理
 app.use((err, req, res, next) => {
-  console.error('Express 錯誤:', err);
-  res.status(500).json({ message: '伺服器內部錯誤', error: err.message });
+  console.error('伺服器錯誤:', err);
+  res.status(500).json({ 
+    message: '伺服器錯誤',
+    error: err.message 
+  });
 });
 
-// TODO: 加入 users、quiz、achievement 等路由
-
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-}).on('error', (err) => {
-  console.error('伺服器啟動失敗:', err);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`伺服器運行於 port ${PORT}`);
+  console.log(`API 端點: http://localhost:${PORT}/api`);
 });

@@ -35,6 +35,10 @@ node_modules/
 /server/output/
 /server/temp/
 
+# Multer 檔案上傳目錄
+/server/uploads/
+uploads/
+
 # ==================================
 # 日誌檔案 (Logs)
 # ==================================
