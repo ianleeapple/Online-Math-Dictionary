@@ -49,6 +49,7 @@
               <th>觀念</th>
               <th>題目內容</th>
               <th>題目附圖</th>
+              <th>題型</th>
               <th>答案</th>
               <th>難易度</th>
               <th>建立時間</th>
@@ -57,13 +58,14 @@
           <tbody>
             <tr v-for="q in questions" :key="q.id">
               <td>{{ q.level }}</td>
-              <td>{{ q.topic }}</td>
+              <td v-html="formatTopic(q.topic)"></td>
               <td>{{ q.concept }}</td>
               <td>{{ q.content }}</td>
               <td>
                 <span v-if="q.image_url">有</span>
                 <span v-else>無</span>
               </td>
+              <td>{{ getTypeName(q.type) }}</td>
               <td>{{ q.answer }}</td>
               <td>{{ q.difficulty }}</td>
               <td>{{ formatDate(q.created_at) }}</td>
@@ -80,18 +82,55 @@ import { ref, computed, watch, onMounted } from 'vue';
 
 const allConcepts = ref({
   國中: {
-    '主題01': ['觀念01-A', '觀念01-B'],
-    '主題02': ['觀念02-A', '觀念02-B', '觀念02-C'],
-    '主題03': ['觀念03-A'],
-    '主題04': ['觀念04-A', '觀念04-B'],
-    '主題05': ['觀念05-A', '觀念05-B', '觀念05-C']
+    '主題00 國中測試用主題': ['所有觀念'],
+    '主題01 數線與數的運算': ['所有觀念'],
+    '主題02 因數與倍數': ['所有觀念'],
+    '主題03 一元一次方程式': ['所有觀念'],
+    '主題04 二元一次方程式': ['所有觀念'],
+    '主題05 直角坐標平面': ['所有觀念'],
+    '主題06 比例': ['所有觀念'],
+    '主題07 一元一次不等式': ['所有觀念'],
+    '主題08 線對稱與三視圖': ['所有觀念'],
+    '主題09 乘法公式與多項式': ['所有觀念'],
+    '主題10 根式運算與畢氏定理': ['所有觀念'],
+    '主題11 因式分解': ['所有觀念'],
+    '主題12 一元二次方程式': ['所有觀念'],
+    '主題13 數列與級數': ['所有觀念'],
+    '主題14 函數定義與線型函數': ['所有觀念'],
+    '主題15 三角形的基本性質': ['所有觀念'],
+    '主題16 平行與四邊形': ['所有觀念'],
+    '主題17 相似形': ['所有觀念'],
+    '主題18 圓形': ['所有觀念'],
+    '主題19 推理證明與三心': ['所有觀念'],
+    '主題20 二次函數': ['所有觀念'],
+    '主題21 統計': ['所有觀念'],
+    '主題22 機率': ['所有觀念'],
+    '主題23 立體圖形': ['所有觀念']
   },
   高中: {
-    '主題H01': ['觀念H01-A', '觀念H01-B'],
-    '主題H02': ['觀念H02-A', '觀念H02-B', '觀念H02-C'],
-    '主題H03': ['觀念H03-A'],
-    '主題H04': ['觀念H04-A', '觀念H04-B'],
-    '主題H05': ['觀念H05-A', '觀念H05-B']
+    '主題00 高中測試用主題': ['所有觀念'],
+    '主題01 數與式': ['所有觀念'],
+    '主題02 指數與對數函數': ['所有觀念'],
+    '主題03 直線與圓': ['所有觀念'],
+    '主題04 多項式函數': ['所有觀念'],
+    '主題05 數列級數': ['所有觀念'],
+    '主題06 排列組合': ['所有觀念'],
+    '主題07 機率': ['所有觀念'],
+    '主題08 數據分析': ['所有觀念'],
+    '主題09 三角函數': ['所有觀念'],
+    '主題10 平面向量': ['所有觀念'],
+    '主題11 平面上的比例(數B)': ['所有觀念'],
+    '主題12 空間向量': ['所有觀念'],
+    '主題13 空間中的平面與直線(數A)': ['所有觀念'],
+    '主題14 矩陣': ['所有觀念'],
+    '主題15 圓錐截痕(數B)': ['所有觀念'],
+    '主題16 球面與經緯度(數B)': ['所有觀念'],
+    '主題17 極限與函數': ['所有觀念'],
+    '主題18 多項式的微積分': ['所有觀念'],
+    '主題19 複數平面': ['所有觀念'],
+    '主題20 機率分布與統計': ['所有觀念'],
+    '主題21 二次曲線(數甲)': ['所有觀念'],
+    '主題22 線性規劃(數乙)': ['所有觀念']
   }
 });
 
@@ -183,6 +222,25 @@ function formatDate(ts) {
   const d = new Date(ts);
   return d.toLocaleString();
 }
+
+function getTypeName(type) {
+  const typeMap = {
+    'single': '單選題',
+    'multiple': '多選題',
+    'fill': '選填題'
+  };
+  return typeMap[type] || type;
+}
+
+// 將主題編號及名稱分行顯示"
+function formatTopic(topic) {
+  if (!topic) return '';
+  const match = topic.match(/^(主題\d+)\s+(.+)$/);
+  if (match) {
+    return `${match[1]}<br>${match[2]}`;
+  }
+  return topic;
+}
 </script>
 
 <style scoped>
@@ -232,15 +290,15 @@ h2 { margin-bottom: 20px; }
   cursor: pointer;
   font-size: 14px;
 }
-.btn:hover { background-color: #c06565; }
-
+.btn:hover {
+  background-color: #c06565;
+}
 .btn-row {
   display: flex;
   gap: 12px;
   align-items: center;
   margin-top: 16px;
 }
-
 /* 題目卡片只微調內距（不改變版位） */
 .question-card {
   padding: 16px;
@@ -248,7 +306,6 @@ h2 { margin-bottom: 20px; }
   margin-top: 12px;
   box-sizing: border-box;
 }
-
 .question-image {
   margin: 16px 0;
 }
@@ -257,7 +314,6 @@ h2 { margin-bottom: 20px; }
   max-height: 300px;
   border-radius: 6px;
 }
-
 /* 新增題目表格樣式 */
 .question-table {
   width: 100%;
@@ -276,27 +332,26 @@ h2 { margin-bottom: 20px; }
   background-color: #f2f2f2;
   font-weight: bold;
 }
-
 /* 設定各欄位寬度 */
 .question-table th:nth-child(1),
 .question-table td:nth-child(1) {
-  width: 8%;
+  width: 7%;
 }
 .question-table th:nth-child(2),
 .question-table td:nth-child(2) {
-  width: 10%;
+  width: 9%;
 }
 .question-table th:nth-child(3),
 .question-table td:nth-child(3) {
-  width: 12%;
+  width: 10%;
 }
 .question-table th:nth-child(4) {
-  width: 30%;
+  width: 28%;
   text-align: center;
 }
 .question-table td:nth-child(4) {
-  width: 30%;
-  max-width: 300px;
+  width: 28%;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: normal;
@@ -304,21 +359,24 @@ h2 { margin-bottom: 20px; }
 }
 .question-table th:nth-child(5),
 .question-table td:nth-child(5) {
-  width: 8%;
+  width: 7%;
 }
 .question-table th:nth-child(6),
 .question-table td:nth-child(6) {
-  width: 12%;
+  width: 8%;
 }
 .question-table th:nth-child(7),
 .question-table td:nth-child(7) {
-  width: 8%;
+  width: 10%;
 }
 .question-table th:nth-child(8),
 .question-table td:nth-child(8) {
-  width: 12%;
+  width: 7%;
 }
-
+.question-table th:nth-child(9),
+.question-table td:nth-child(9) {
+  width: 14%;
+}
 .question-thumbnail {
   max-width: 100px;
   max-height: 100px;
