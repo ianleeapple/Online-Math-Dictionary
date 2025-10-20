@@ -3,11 +3,15 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const routes = require('./routes');
+require('dotenv').config();
 
 const app = express();
 
-// 中介軟體
-app.use(cors());
+// 中介軟體 - 順序很重要
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -32,6 +36,7 @@ app.use('/api', routes);
 app.use((err, req, res, next) => {
   console.error('伺服器錯誤:', err);
   res.status(500).json({ 
+    success: false,
     message: '伺服器錯誤',
     error: err.message 
   });
@@ -41,4 +46,14 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`伺服器運行於 port ${PORT}`);
   console.log(`API 端點: http://localhost:${PORT}/api`);
+});
+
+// 404 處理
+app.use((req, res) => {
+  console.log('404 Not Found:', req.method, req.url);
+  res.status(404).json({ 
+    success: false,
+    message: 'API endpoint not found',
+    path: req.url
+  });
 });

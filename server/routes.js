@@ -192,6 +192,75 @@ router.get('/question', async (req, res) => {
   }
 });
 
+// 編輯題目 API
+router.put('/question/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { level, topic, concept, content, type, answer, difficulty } = req.body;
+
+    if (!level || !topic || !concept || !content || !type || !difficulty) {
+      return res.status(400).json({
+        success: false,
+        message: '缺少必要欄位'
+      });
+    }
+
+    const [result] = await pool.execute(
+      `UPDATE question 
+       SET level = ?, topic = ?, concept = ?, content = ?, type = ?, answer = ?, difficulty = ?
+       WHERE id = ?`,
+      [level, topic, concept, content, type, answer || null, difficulty, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該題目'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: '更新成功'
+    });
+
+  } catch (err) {
+    console.error('更新題目失敗:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || '更新題目失敗'
+    });
+  }
+});
+
+// 刪除題目 API
+router.delete('/question/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await pool.execute('DELETE FROM question WHERE id = ?', [id]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該題目'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: '刪除成功'
+    });
+
+  } catch (err) {
+    console.error('刪除題目失敗:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message || '刪除題目失敗'
+    });
+  }
+});
+
 // 刪除使用者
 router.delete('/users/:id', async (req, res) => {
   const { id } = req.params;

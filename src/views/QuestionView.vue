@@ -53,6 +53,7 @@
               <th>答案</th>
               <th>難易度</th>
               <th>建立時間</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -69,9 +70,80 @@
               <td>{{ q.answer }}</td>
               <td>{{ q.difficulty }}</td>
               <td>{{ formatDate(q.created_at) }}</td>
+              <td>
+                <div class="action-buttons">
+                  <button class="action-btn edit-btn" @click="editQuestion(q)">編輯</button>
+                  <button class="action-btn delete-btn" @click="deleteQuestion(q.id)">刪除</button>
+                </div>
+              </td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- 編輯題目區塊 -->
+    <div v-if="editingQuestion" class="modal-overlay" @click.self="cancelEdit">
+      <div class="modal-content">
+        <h3>編輯題目</h3>
+        
+        <div class="form-group">
+          <label>範圍 <span class="required">*</span></label>
+          <select v-model="editForm.level" required>
+            <option value="國中">國中</option>
+            <option value="高中">高中</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>主題 <span class="required">*</span></label>
+          <select v-model="editForm.topic" required>
+            <option disabled value="">請選擇主題</option>
+            <option v-for="topic in editTopics" :key="topic" :value="topic">{{ topic }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>觀念 <span class="required">*</span></label>
+          <select v-model="editForm.concept" required>
+            <option disabled value="">請選擇觀念</option>
+            <option v-for="concept in editConcepts" :key="concept" :value="concept">{{ concept }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>題目內容 <span class="required">*</span></label>
+          <textarea v-model="editForm.content" rows="4" required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>題型 <span class="required">*</span></label>
+          <select v-model="editForm.type" required>
+            <option value="single">單選題</option>
+            <option value="multiple">多選題</option>
+            <option value="fill">選填題</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>答案（選填）</label>
+          <input type="text" v-model="editForm.answer" placeholder="請輸入答案" />
+        </div>
+
+        <div class="form-group">
+          <label>難易度 <span class="required">*</span></label>
+          <select v-model="editForm.difficulty" required>
+            <option value="容易">容易</option>
+            <option value="中等">中等</option>
+            <option value="困難">困難</option>
+            <option value="魔王">魔王</option>
+          </select>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn" @click="saveEdit">儲存變更</button>
+          <button class="btn cancel-btn" @click="cancelEdit">取消</button>
+        </div>
       </div>
     </div>
   </div>
@@ -241,6 +313,170 @@ function formatTopic(topic) {
   }
   return topic;
 }
+
+const editingQuestion = ref(null);
+const editForm = ref({
+  id: null,
+  level: '',
+  topic: '',
+  concept: '',
+  content: '',
+  type: '',
+  answer: '',
+  difficulty: ''
+});
+
+const editTopics = computed(() => {
+  if (!editForm.value.level) return [];
+  return Object.keys(allConcepts.value[editForm.value.level] || {});
+});
+
+const editConcepts = computed(() => {
+  if (!editForm.value.level || !editForm.value.topic) return [];
+  return allConcepts.value[editForm.value.level][editForm.value.topic] || [];
+});
+
+// 為編輯表單新增一個標記，避免 watch 清空已設定的值
+const isEditingInit = ref(false);
+
+watch(() => editForm.value.level, () => {
+  if (!isEditingInit.value) {
+    editForm.value.topic = '';
+    editForm.value.concept = '';
+  }
+});
+
+watch(() => editForm.value.topic, () => {
+  if (!isEditingInit.value) {
+    editForm.value.concept = '';
+  }
+});
+
+function editQuestion(question) {
+  editingQuestion.value = question;
+  
+  // 設定初始化標記，防止 watch 清空值
+  isEditingInit.value = true;
+  
+  // 確保所有欄位都正確填入
+  editForm.value = {
+    id: question.id,
+    level: question.level || '',
+    topic: question.topic || '',
+    concept: question.concept || '',
+    content: question.content || '',
+    type: question.type || 'single',
+    answer: question.answer || '',
+    difficulty: question.difficulty || '中等'
+  };
+  
+  // 使用 nextTick 確保 DOM 更新後再解除標記
+  setTimeout(() => {
+    isEditingInit.value = false;
+  }, 100);
+  
+  console.log('編輯題目資料:', editForm.value);
+}
+
+function cancelEdit() {
+  editingQuestion.value = null;
+  isEditingInit.value = false;
+  editForm.value = {
+    id: null,
+    level: '',
+    topic: '',
+    concept: '',
+    content: '',
+    type: '',
+    answer: '',
+    difficulty: ''
+  };
+}
+
+async function saveEdit() {
+  if (!editForm.value.level || !editForm.value.topic || !editForm.value.concept || 
+      !editForm.value.content || !editForm.value.type || !editForm.value.difficulty) {
+    alert('請填寫所有必填欄位');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/question/${editForm.value.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        level: editForm.value.level,
+        topic: editForm.value.topic,
+        concept: editForm.value.concept,
+        content: editForm.value.content,
+        type: editForm.value.type,
+        answer: editForm.value.answer,
+        difficulty: editForm.value.difficulty
+      })
+    });
+
+    const rawText = await res.text();
+    
+    if (rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+      throw new Error('伺服器回傳 HTML 而非 JSON，請確認後端服務已啟動');
+    }
+
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseError) {
+      throw new Error('伺服器回應格式錯誤');
+    }
+    
+    if (!res.ok) {
+      throw new Error(data.message || '更新失敗');
+    }
+
+    alert('更新成功！');
+    cancelEdit();
+    fetchQuestions();
+  } catch (e) {
+    console.error('完整錯誤:', e);
+    alert('更新失敗：' + e.message);
+  }
+}
+
+async function deleteQuestion(id) {
+  if (!confirm('是否要刪除此題目？')) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/question/${id}`, {
+      method: 'DELETE'
+    });
+
+    const rawText = await res.text();
+    
+    if (rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+      throw new Error('伺服器回傳 HTML 而非 JSON，請確認後端服務已啟動');
+    }
+
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseError) {
+      throw new Error('伺服器回應格式錯誤');
+    }
+    
+    if (!res.ok) {
+      throw new Error(data.message || '刪除失敗');
+    }
+
+    alert('刪除成功！');
+    fetchQuestions();
+  } catch (e) {
+    console.error('完整錯誤:', e);
+    alert('刪除失敗：' + e.message);
+  }
+}
 </script>
 
 <style scoped>
@@ -335,23 +571,23 @@ h2 { margin-bottom: 20px; }
 /* 設定各欄位寬度 */
 .question-table th:nth-child(1),
 .question-table td:nth-child(1) {
-  width: 7%;
+  width: 6%;
 }
 .question-table th:nth-child(2),
 .question-table td:nth-child(2) {
-  width: 9%;
+  width: 12%;
 }
 .question-table th:nth-child(3),
 .question-table td:nth-child(3) {
   width: 10%;
 }
 .question-table th:nth-child(4) {
-  width: 28%;
+  width: 25%;
   text-align: center;
 }
 .question-table td:nth-child(4) {
-  width: 28%;
-  max-width: 280px;
+  width: 25%;
+  max-width: 250px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: normal;
@@ -359,11 +595,11 @@ h2 { margin-bottom: 20px; }
 }
 .question-table th:nth-child(5),
 .question-table td:nth-child(5) {
-  width: 7%;
+  width: 6%;
 }
 .question-table th:nth-child(6),
 .question-table td:nth-child(6) {
-  width: 8%;
+  width: 7%;
 }
 .question-table th:nth-child(7),
 .question-table td:nth-child(7) {
@@ -371,16 +607,129 @@ h2 { margin-bottom: 20px; }
 }
 .question-table th:nth-child(8),
 .question-table td:nth-child(8) {
-  width: 7%;
+  width: 6%;
 }
 .question-table th:nth-child(9),
 .question-table td:nth-child(9) {
-  width: 14%;
+  width: 12%;
+}
+.question-table th:nth-child(10),
+.question-table td:nth-child(10) {
+  width: 6%;
+  min-width: 70px;
 }
 .question-thumbnail {
   max-width: 100px;
   max-height: 100px;
   border-radius: 4px;
   margin-top: 8px;
+}
+
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.action-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  width: 60px;
+  transition: all 0.2s;
+}
+
+.edit-btn {
+  background-color: #d67b7b;
+  color: white;
+}
+
+.edit-btn:hover {
+  background-color: #c06565;
+}
+
+.delete-btn {
+  background-color: #d67b7b;
+  color: white;
+}
+
+.delete-btn:hover {
+  background-color: #c06565;
+}
+
+/* 模態框樣式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-content h3 {
+  margin-bottom: 20px;
+  color: #333;
+  border-bottom: 2px solid #d67b7b;
+  padding-bottom: 10px;
+}
+
+.modal-content .form-group {
+  margin-bottom: 15px;
+}
+
+.modal-content label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: bold;
+  color: #2d2d2d;
+}
+
+.modal-content input,
+.modal-content textarea,
+.modal-content select {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.cancel-btn {
+  background-color: #95a5a6;
+}
+
+.cancel-btn:hover {
+  background-color: #7f8c8d;
+}
+
+.required {
+  color: #e74c3c;
+  margin-left: 4px;
 }
 </style>
