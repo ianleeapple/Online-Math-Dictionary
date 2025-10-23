@@ -30,7 +30,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -63,9 +63,19 @@ const items = ref([
   }
 ]);
 
+let checkInterval = null;
+
 onMounted(async () => {
   // 呼叫檢查使用者身分
   checkUserRole();
+  
+  // 監聽視窗焦點事件，當使用者切換回頁面時重新檢查
+  window.addEventListener('focus', checkUserRole);
+  
+  // 定期檢查使用者登入狀態（每秒檢查一次）
+  checkInterval = setInterval(() => {
+    checkUserRole();
+  }, 1000);
   
   try {
     // 取得所有用戶
@@ -82,6 +92,14 @@ onMounted(async () => {
   }
 });
 
+onUnmounted(() => {
+  // 清除事件監聽和定時器
+  window.removeEventListener('focus', checkUserRole);
+  if (checkInterval) {
+    clearInterval(checkInterval);
+  }
+});
+
 // 檢查使用者身分
 function checkUserRole() {
   const currentUser = localStorage.getItem('currentUser');
@@ -93,6 +111,9 @@ function checkUserRole() {
       console.error('解析使用者資料失敗:', e);
       isTeacher.value = false;
     }
+  } else {
+    // 如果沒有使用者資料，設為 false
+    isTeacher.value = false;
   }
 }
 
