@@ -137,7 +137,6 @@ const questionTypes = [
   { label: '單選題', value: 'single' },
   { label: '多選題', value: 'multiple' },
   { label: '選填題', value: 'fill-in' },
-  { label: '非選題', value: 'essay' },
   { label: '平均分配', value: 'average' },
   { label: '系統自動', value: 'auto' }
 ];

@@ -477,6 +477,183 @@ router.get('/video/:videoId', (req, res) => {
   }
 });
 
+// ========================================================
+// 班級群組管理 API
+// ========================================================
+
+// 建立班級群組（老師）
+router.post('/classes', async (req, res) => {
+  const { name, teacherId } = req.body;
+  try {
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ message: '班級名稱為必填' });
+    }
+    
+    if (!teacherId) {
+      return res.status(400).json({ message: '缺少老師 ID' });
+    }
+    
+    // 產生唯一的 6 位數加入代碼
+    function generateCode() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
+    
+    let code = generateCode();
+    let codeExists = true;
+    
+    // 確保代碼唯一
+    while (codeExists) {
+      const [existing] = await pool.query('SELECT id FROM classes WHERE code = ?', [code]);
+      if (existing.length === 0) {
+        codeExists = false;
+      } else {
+        code = generateCode();
+      }
+    }
+    
+    const [result] = await pool.query(
+      'INSERT INTO classes (name, code, teacher_id) VALUES (?, ?, ?)',
+      [name.trim(), code, teacherId]
+    );
+    
+    res.status(201).json({
+      message: '班級建立成功',
+      class: {
+        id: result.insertId,
+        name: name.trim(),
+        code: code,
+        teacher_id: teacherId
+      }
+    });
+  } catch (error) {
+    console.error('建立班級失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+
+// 取得老師的所有班級（含學生資料）
+router.get('/classes/teacher/:teacherId', async (req, res) => {
+  const { teacherId } = req.params;
+  
+  try {
+    // 取得老師的所有班級
+    const [classes] = await pool.query(
+      'SELECT id, name, code, created_at FROM classes WHERE teacher_id = ?',
+      [teacherId]
+    );
+    
+    // 為每個班級取得學生資料
+    for (let cls of classes) {
+      const [students] = await pool.query(
+        `SELECT u.id, u.name, u.email, cm.joined_at 
+         FROM class_members cm 
+         JOIN users u ON cm.student_id = u.id 
+         WHERE cm.class_id = ?`,
+        [cls.id]
+      );
+      cls.students = students;
+    }
+    
+    res.json(classes);
+  } catch (error) {
+    console.error('取得老師班級失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+
+// 取得學生的所有班級（含老師和其他學生資料）
+router.get('/classes/student/:studentId', async (req, res) => {
+  const { studentId } = req.params;
+  try {
+    // 取得學生加入的所有班級
+    const [classes] = await pool.query(
+      `SELECT c.id, c.name, c.code, c.teacher_id, cm.joined_at 
+       FROM class_members cm 
+       JOIN classes c ON cm.class_id = c.id 
+       WHERE cm.student_id = ?`,
+      [studentId]
+    );
+    // 為每個班級取得老師和學生資料
+    for (let cls of classes) {
+      // 取得老師資料（包含 school 欄位）
+      const [teachers] = await pool.query(
+        'SELECT id, name, email, school FROM users WHERE id = ?',
+        [cls.teacher_id]
+      );
+      cls.teacher = teachers[0] || null;
+      // 取得所有學生資料（包含 school 欄位）
+      const [students] = await pool.query(
+        `SELECT u.id, u.name, u.email, u.school, cm.joined_at 
+         FROM class_members cm 
+         JOIN users u ON cm.student_id = u.id 
+         WHERE cm.class_id = ?`,
+        [cls.id]
+      );
+      cls.students = students;
+    }
+    res.json(classes);
+  } catch (error) {
+    console.error('取得學生班級失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+// 學生加入班級（使用加入代碼）
+router.post('/classes/join', async (req, res) => {
+  const { code, studentId } = req.body;
+  try {
+    if (!code || code.trim() === '') {
+      return res.status(400).json({ message: '請輸入加入代碼' });
+    }
+    if (!studentId) {
+      return res.status(400).json({ message: '缺少學生 ID' });
+    }
+    // 查詢班級是否存在
+    const [classes] = await pool.query('SELECT id, name FROM classes WHERE code = ?', [code.trim()]);
+    if (classes.length === 0) {
+      return res.status(404).json({ message: '找不到該班級，請確認代碼是否正確' });
+    }
+    const classId = classes[0].id;
+    // 檢查是否已加入
+    const [existing] = await pool.query(
+      'SELECT * FROM class_members WHERE class_id = ? AND student_id = ?',
+      [classId, studentId]
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({ message: '您已經加入此班級' });
+    }
+    // 加入班級
+    await pool.query(
+      'INSERT INTO class_members (class_id, student_id) VALUES (?, ?)',
+      [classId, studentId]
+    );
+    res.status(201).json({
+      message: `成功加入班級「${classes[0].name}」`,
+      class: classes[0]
+    });
+  } catch (error) {
+    console.error('加入班級失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+// 學生退出班級
+router.delete('/classes/:classId/leave/:studentId', async (req, res) => {
+  const { classId, studentId } = req.params;
+  try {
+    const [result] = await pool.query(
+      'DELETE FROM class_members WHERE class_id = ? AND student_id = ?',
+      [classId, studentId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: '找不到該班級成員記錄' });
+    }
+    res.status(200).json({ message: '已退出班級' });
+  } catch (error) {
+    console.error('退出班級失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+
 module.exports = router;
 
 
@@ -931,3 +1108,6 @@ router.post('/tts/generate', async (req, res) => {
     }
   }
 });
+
+
+module.exports = router;
