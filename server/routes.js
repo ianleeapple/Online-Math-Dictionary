@@ -22,6 +22,45 @@ router.get('/users', async (req, res) => {
   res.json(rows);
 });
 
+// 編輯使用者資料(個人檔案)
+router.put('/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, school, birthday } = req.body;
+  
+  try {
+    // 驗證必填欄位
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ message: '姓名為必填欄位' });
+    }
+    
+    if (!school || school.trim() === '') {
+      return res.status(400).json({ message: '學校為必填欄位' });
+    }
+    
+    if (!birthday) {
+      return res.status(400).json({ message: '生日為必填欄位' });
+    }
+
+    // 更新使用者資料（不包含密碼、email、role）
+    const [result] = await pool.query(
+      'UPDATE users SET name = ?, school = ?, birthday = ? WHERE id = ?',
+      [name.trim(), school.trim(), birthday, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: '找不到該使用者' });
+    }
+
+    res.status(200).json({ 
+      message: '使用者資料已更新',
+      user: { id, name: name.trim(), school: school.trim(), birthday }
+    });
+  } catch (error) {
+    console.error('更新使用者資料失敗:', error);
+    res.status(500).json({ message: '資料庫錯誤', error: error.message });
+  }
+});
+
 // 取得所有成就
 router.get('/achievements', async (req, res) => {
   const [rows] = await pool.query('SELECT * FROM achievement');
@@ -440,10 +479,13 @@ router.get('/video/:videoId', (req, res) => {
 
 module.exports = router;
 
+
+
 const aiConfig = require('./aiConfig');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-
+// ========================================================
 // AI 類題生成測試 API (使用 Google Gemini)
+// ========================================================
 router.post('/ai/generate', async (req, res) => {
   const { template, type, variations, difficulty, options_template, constraints } = req.body;
   const count = variations || 3;
@@ -889,5 +931,3 @@ router.post('/tts/generate', async (req, res) => {
     }
   }
 });
-
-module.exports = router;
