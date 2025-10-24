@@ -12,15 +12,17 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 班級群組表
 CREATE TABLE IF NOT EXISTS classes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   code VARCHAR(10) UNIQUE NOT NULL,
   teacher_id INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE SET NULL
+  FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- 班級成員表
 CREATE TABLE IF NOT EXISTS class_members (
   class_id INT,
   student_id INT,
