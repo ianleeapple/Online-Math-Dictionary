@@ -73,6 +73,7 @@
               <td>
                 <div class="action-buttons">
                   <button class="action-btn edit-btn" @click="editQuestion(q)">編輯</button>
+                  <button class="action-btn generate-btn" @click="generateSimilarQuestion(q)">產生類題</button>
                   <button class="action-btn delete-btn" @click="deleteQuestion(q.id)">刪除</button>
                 </div>
               </td>
@@ -83,7 +84,7 @@
     </div>
 
     <!-- 編輯題目區塊 -->
-    <div v-if="editingQuestion" class="modal-overlay" @click.self="cancelEdit">
+    <div v-if="editingQuestion" class="modal-overlay">
       <div class="modal-content">
         <h3>編輯題目</h3>
         
@@ -477,6 +478,11 @@ async function deleteQuestion(id) {
     alert('刪除失敗：' + e.message);
   }
 }
+
+// 產生類題功能（未來實作）
+function generateSimilarQuestion(question) {
+  alert('AI 類題生成功能尚未實作。');
+}
 </script>
 
 <style scoped>
@@ -571,23 +577,23 @@ h2 { margin-bottom: 20px; }
 /* 設定各欄位寬度 */
 .question-table th:nth-child(1),
 .question-table td:nth-child(1) {
-  width: 6%;
+  width: 5%;
 }
 .question-table th:nth-child(2),
 .question-table td:nth-child(2) {
-  width: 12%;
+  width: 11%;
 }
 .question-table th:nth-child(3),
 .question-table td:nth-child(3) {
-  width: 10%;
+  width: 9%;
 }
 .question-table th:nth-child(4) {
-  width: 25%;
+  width: 24%;
   text-align: center;
 }
 .question-table td:nth-child(4) {
-  width: 25%;
-  max-width: 250px;
+  width: 24%;
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: normal;
@@ -595,19 +601,19 @@ h2 { margin-bottom: 20px; }
 }
 .question-table th:nth-child(5),
 .question-table td:nth-child(5) {
-  width: 6%;
+  width: 5%;
 }
 .question-table th:nth-child(6),
 .question-table td:nth-child(6) {
-  width: 7%;
+  width: 6%;
 }
 .question-table th:nth-child(7),
 .question-table td:nth-child(7) {
-  width: 10%;
+  width: 7%;
 }
 .question-table th:nth-child(8),
 .question-table td:nth-child(8) {
-  width: 6%;
+  width: 5%;
 }
 .question-table th:nth-child(9),
 .question-table td:nth-child(9) {
@@ -615,8 +621,8 @@ h2 { margin-bottom: 20px; }
 }
 .question-table th:nth-child(10),
 .question-table td:nth-child(10) {
-  width: 6%;
-  min-width: 70px;
+  width: 8%;
+  min-width: 80px;
 }
 .question-thumbnail {
   max-width: 100px;
@@ -630,6 +636,7 @@ h2 { margin-bottom: 20px; }
   flex-direction: column;
   gap: 6px;
   align-items: center;
+  justify-content: center;
 }
 
 .action-btn {
@@ -637,9 +644,10 @@ h2 { margin-bottom: 20px; }
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
-  width: 60px;
+  font-size: 12px;
+  width: 80px;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .edit-btn {
@@ -648,6 +656,15 @@ h2 { margin-bottom: 20px; }
 }
 
 .edit-btn:hover {
+  background-color: #c06565;
+}
+
+.generate-btn {
+  background-color: #d67b7b;
+  color: white;
+}
+
+.generate-btn:hover {
   background-color: #c06565;
 }
 
