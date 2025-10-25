@@ -20,21 +20,31 @@
           </div>
         </div>
 
-        <table v-if="expandedIndex === index" class="student-table">
+        <table v-if="expandedIndex === index" class="student-table teacher-table">
           <thead>
             <tr>
               <th>學生帳號</th>
               <th>學生姓名</th>
+              <th>最後上線時間</th>
+              <th>最後登入 IP</th>
+              <th>最近測驗成績</th>
+              <th>平均成績</th>
+              <th>已進行測驗次數</th>
               <th>加入時間</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="group.students.length === 0">
-              <td colspan="3" style="text-align: center; color: #999;">尚無學生加入</td>
+              <td colspan="8" style="text-align: center; color: #999;">尚無學生加入</td>
             </tr>
             <tr v-for="student in group.students" :key="student.id">
               <td>{{ student.email }}</td>
               <td>{{ student.name }}</td>
+              <td>{{ formatDate(student.last_login_time) || '尚未登入' }}</td>
+              <td>{{ student.last_login_ip || '-' }}</td>
+              <td style="color: #999;">尚未實作</td>
+              <td style="color: #999;">尚未實作</td>
+              <td style="color: #999;">尚未實作</td>
               <td>{{ formatDate(student.joined_at) }}</td>
             </tr>
           </tbody>
@@ -70,25 +80,25 @@
           <thead>
             <tr>
               <th>身分</th>
-              <th>姓名</th>
-              <th>帳號</th>
               <th>學校</th>
+              <th>帳號</th>
+              <th>姓名</th>
             </tr>
           </thead>
           <tbody>
             <!-- 老師資料 -->
             <tr v-if="group.teacher">
               <td>老師</td>
-              <td>{{ group.teacher.name }}</td>
-              <td>{{ group.teacher.email }}</td>
               <td>{{ group.teacher.school || '未設定' }}</td>
+              <td>{{ group.teacher.email }}</td>
+              <td>{{ group.teacher.name }}</td>
             </tr>
             <!-- 學生資料 -->
             <tr v-for="student in group.students" :key="student.id">
               <td>學生</td>
-              <td>{{ student.name }}</td>
-              <td>{{ student.email }}</td>
               <td>{{ student.school || '未設定' }}</td>
+              <td>{{ student.email }}</td>
+              <td>{{ student.name }}</td>
             </tr>
           </tbody>
         </table>
@@ -378,7 +388,58 @@ h2 {
   border: 1px solid #ddd;
   padding: 12px;
   font-size: 14px;
+}
+
+/* 學生介面（4 欄位）*/
+.student-table:not(.teacher-table) th,
+.student-table:not(.teacher-table) td {
   width: 25%;
+}
+
+/* 老師介面（8 欄位）*/
+.teacher-table th,
+.teacher-table td {
+  width: auto;
+}
+
+.teacher-table th:nth-child(1),
+.teacher-table td:nth-child(1) {
+  width: 18%;
+}
+
+.teacher-table th:nth-child(2),
+.teacher-table td:nth-child(2) {
+  width: 10%;
+}
+
+.teacher-table th:nth-child(3),
+.teacher-table td:nth-child(3) {
+  width: 13%;
+}
+
+.teacher-table th:nth-child(4),
+.teacher-table td:nth-child(4) {
+  width: 11%;
+}
+
+.teacher-table th:nth-child(5),
+.teacher-table td:nth-child(5) {
+  width: 11%;
+}
+
+.teacher-table th:nth-child(6),
+.teacher-table td:nth-child(6) {
+  width: 9%;
+}
+
+.teacher-table th:nth-child(7),
+.teacher-table td:nth-child(7) {
+  width: 12%;
+}
+
+.teacher-table th:nth-child(8),
+.teacher-table td:nth-child(8) {
+  width: 13%;
 }
 
 .student-table th {
