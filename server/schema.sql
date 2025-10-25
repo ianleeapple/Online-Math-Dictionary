@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
   role ENUM('學生','老師') NOT NULL,
   school VARCHAR(100),
   birthday DATE,
+  last_login_time TIMESTAMP NULL DEFAULT NULL,
+  last_login_ip VARCHAR(45) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
