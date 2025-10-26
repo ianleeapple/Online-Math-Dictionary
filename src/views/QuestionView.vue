@@ -61,19 +61,19 @@
               <td>{{ q.level }}</td>
               <td v-html="formatTopic(q.topic)"></td>
               <td>{{ q.concept }}</td>
-              <td>{{ q.content }}</td>
+              <td><MathContent :content="q.content" /></td>
               <td>
                 <span v-if="q.image_url">有</span>
                 <span v-else>無</span>
               </td>
               <td>{{ getTypeName(q.type) }}</td>
-              <td>{{ q.answer }}</td>
+              <td><MathContent :content="q.answer" /></td>
               <td>{{ q.difficulty }}</td>
               <td>{{ formatDate(q.created_at) }}</td>
               <td>
                 <div class="action-buttons">
                   <button class="action-btn edit-btn" @click="editQuestion(q)">編輯</button>
-                  <button class="action-btn generate-btn" @click="generateSimilarQuestion(q)">產生類題</button>
+                  <button class="action-btn generate-btn" @click="openGenerateDialog(q)">產生類題</button>
                   <button class="action-btn delete-btn" @click="deleteQuestion(q.id)">刪除</button>
                 </div>
               </td>
@@ -147,11 +147,84 @@
         </div>
       </div>
     </div>
+
+    <!-- 產生類題對話框 -->
+    <div v-if="showGenerateDialog" class="modal-overlay">
+      <div class="modal-content">
+        <h3>AI 產生類題</h3>
+        
+        <div class="form-group">
+          <label>原始題目預覽</label>
+          <div class="question-preview">{{ generateSourceQuestion?.content.substring(0, 100) }}...</div>
+        </div>
+
+        <div class="form-group">
+          <label>生成數量 <span class="required">*</span></label>
+          <select v-model="generateCount">
+            <option value="1">1 題</option>
+            <option value="2">2 題</option>
+            <option value="3">3 題</option>
+            <option value="5">5 題</option>
+            <option value="10">10 題</option>
+          </select>
+        </div>
+
+        <p class="help-text">
+          AI 將根據此題目生成 {{ generateCount }} 道類似題目，題目將自動加上「(AI生成)」標記。
+          生成任務會在背景處理，您可以關閉此視窗繼續其他操作。
+        </p>
+
+        <div class="modal-actions">
+          <button class="btn" @click="submitGenerateTask" :disabled="isGenerating">
+            {{ isGenerating ? '建立中...' : '開始生成' }}
+          </button>
+          <button class="btn cancel-btn" @click="closeGenerateDialog">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 任務進度監控區塊 -->
+    <div v-if="activeTasks.length > 0" class="form-container tasks-container">
+      <div class="tasks-header">
+        <h3>AI 生成任務進度</h3>
+        <button class="close-tasks-btn" @click="clearCompletedTasks" title="清除已完成任務">
+          清除已完成
+        </button>
+      </div>
+      <div v-for="task in activeTasks" :key="task.taskId" class="task-card">
+        <div class="task-header">
+          <span class="task-id">任務 #{{ task.taskId }}</span>
+          <span class="task-status" :class="'status-' + task.status">{{ getStatusText(task.status) }}</span>
+          <button 
+            v-if="task.status === 'completed' || task.status === 'failed'" 
+            class="close-task-btn" 
+            @click="removeTask(task.taskId)"
+            title="移除此任務"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="task-info">
+          <p>原始題目: {{ task.sourceContent }}</p>
+          <p>進度: {{ task.completedCount }} / {{ task.totalCount }} 題</p>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" :style="{ width: task.progress + '%' }"></div>
+        </div>
+        <div v-if="task.status === 'completed'" class="task-success">
+          ✅ 生成完成！已新增 {{ task.completedCount }} 道題目到題庫
+        </div>
+        <div v-if="task.status === 'failed'" class="task-error">
+          ❌ 生成失敗: {{ task.errorMessage }}
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import MathContent from '../components/MathContent.vue';
 
 const allConcepts = ref({
   國中: {
@@ -479,10 +552,216 @@ async function deleteQuestion(id) {
   }
 }
 
-// 產生類題功能（未來實作）
-function generateSimilarQuestion(question) {
-  alert('AI 類題生成功能尚未實作。');
+// ==================== AI 產生類題功能 ====================
+const showGenerateDialog = ref(false);
+const generateSourceQuestion = ref(null);
+const generateCount = ref('3');
+const isGenerating = ref(false);
+const activeTasks = ref([]);
+const dismissedTaskIds = ref([]); // 記錄使用者已關閉的任務 ID
+let taskPollingInterval = null;
+
+// 取得當前使用者
+function getCurrentUser() {
+  const userData = localStorage.getItem('currentUser');
+  return userData ? JSON.parse(userData) : null;
 }
+
+// 打開產生對話框
+function openGenerateDialog(question) {
+  generateSourceQuestion.value = question;
+  generateCount.value = '3';
+  showGenerateDialog.value = true;
+}
+
+// 關閉產生對話框
+function closeGenerateDialog() {
+  showGenerateDialog.value = false;
+  generateSourceQuestion.value = null;
+}
+
+// 提交生成任務
+async function submitGenerateTask() {
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
+    alert('請先登入');
+    return;
+  }
+
+  isGenerating.value = true;
+
+  try {
+    const response = await fetch('/api/generation-tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: currentUser.id,
+        sourceQuestionId: generateSourceQuestion.value.id,
+        count: parseInt(generateCount.value)
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || '建立任務失敗');
+    }
+
+    const data = await response.json();
+    
+    alert(`✅ 已建立生成任務 #${data.taskId}\n將生成 ${generateCount.value} 道類似題目\n\n任務將在背景處理，您可以繼續其他操作。`);
+    
+    // 加入監控列表
+    loadUserTasks();
+    
+    closeGenerateDialog();
+
+  } catch (error) {
+    console.error('建立任務失敗:', error);
+    alert('建立任務失敗: ' + error.message);
+  } finally {
+    isGenerating.value = false;
+  }
+}
+
+// 載入使用者的任務列表
+async function loadUserTasks() {
+  const currentUser = getCurrentUser();
+  if (!currentUser) return;
+
+  try {
+    const response = await fetch(`/api/generation-tasks/user/${currentUser.id}`);
+    if (!response.ok) throw new Error('載入任務失敗');
+    
+    const tasks = await response.json();
+    
+    // 只保留進行中的任務 + 當前畫面上已顯示的已完成任務
+    const currentTaskIds = activeTasks.value.map(t => t.taskId);
+    
+    activeTasks.value = tasks.filter(task => {
+      // 如果使用者已關閉此任務，不顯示
+      if (dismissedTaskIds.value.includes(task.taskId)) {
+        return false;
+      }
+      
+      // 保留進行中的任務
+      if (task.status === 'pending' || task.status === 'processing') {
+        return true;
+      }
+      
+      // 如果是已完成/失敗的任務，只保留當前已在畫面上的
+      if (task.status === 'completed' || task.status === 'failed') {
+        return currentTaskIds.includes(task.taskId);
+      }
+      
+      return false;
+    });
+
+  } catch (error) {
+    console.error('載入任務失敗:', error);
+  }
+}
+
+// 判斷任務是否為最近 5 分鐘內（已廢棄，保留以防需要）
+function isRecent(updatedAt) {
+  const taskTime = new Date(updatedAt).getTime();
+  const now = Date.now();
+  return (now - taskTime) < 5 * 60 * 1000; // 5 分鐘
+}
+
+// 取得任務狀態文字
+function getStatusText(status) {
+  const map = {
+    pending: '等待中',
+    processing: '生成中',
+    completed: '已完成',
+    failed: '失敗'
+  };
+  return map[status] || status;
+}
+
+// 開始輪詢任務狀態
+function startTaskPolling() {
+  if (taskPollingInterval) return;
+  
+  // 初始載入
+  loadUserTasks();
+  
+  // 每 3 秒輪詢一次
+  taskPollingInterval = setInterval(async () => {
+    // 記錄輪詢前的任務狀態
+    const previousTasks = [...activeTasks.value];
+    
+    // 重新載入任務
+    await loadUserTasks();
+    
+    // 檢查是否有任務剛完成（狀態從 pending/processing 變成 completed/failed）
+    const newlyCompleted = activeTasks.value.filter(t => 
+      (t.status === 'completed' || t.status === 'failed') &&
+      !previousTasks.some(prev => prev.taskId === t.taskId && (prev.status === 'completed' || prev.status === 'failed'))
+    );
+    
+    // 如果有任務剛完成，且有題目列表，自動刷新題目
+    if (newlyCompleted.length > 0) {
+      console.log(`[任務] 檢測到 ${newlyCompleted.length} 個任務完成`);
+      
+      // 如果有題目列表，刷新顯示新生成的題目
+      if (questions.value.length > 0) {
+        console.log('[任務] 刷新題目列表');
+        fetchQuestions();
+      }
+    }
+  }, 3000);
+}
+
+// 停止輪詢
+function stopTaskPolling() {
+  if (taskPollingInterval) {
+    clearInterval(taskPollingInterval);
+    taskPollingInterval = null;
+  }
+}
+
+// 移除單一任務
+function removeTask(taskId) {
+  // 記錄此任務 ID 為已關閉
+  if (!dismissedTaskIds.value.includes(taskId)) {
+    dismissedTaskIds.value.push(taskId);
+  }
+  
+  // 從顯示列表中移除
+  activeTasks.value = activeTasks.value.filter(t => t.taskId !== taskId);
+}
+
+// 清除所有已完成的任務
+function clearCompletedTasks() {
+  // 記錄所有已完成/失敗的任務為已關閉
+  activeTasks.value.forEach(task => {
+    if ((task.status === 'completed' || task.status === 'failed') && 
+        !dismissedTaskIds.value.includes(task.taskId)) {
+      dismissedTaskIds.value.push(task.taskId);
+    }
+  });
+  
+  // 只保留進行中的任務
+  activeTasks.value = activeTasks.value.filter(t => 
+    t.status === 'pending' || t.status === 'processing'
+  );
+}
+
+// 產生類題功能（舊版，保留但不使用）
+function generateSimilarQuestion(question) {
+  openGenerateDialog(question);
+}
+
+// 元件掛載時啟動輪詢
+onMounted(() => {
+  startTaskPolling();
+});
+
+// 元件卸載時停止輪詢
+onUnmounted(() => {
+  stopTaskPolling();
+});
 </script>
 
 <style scoped>
@@ -748,5 +1027,189 @@ h2 { margin-bottom: 20px; }
 .required {
   color: #e74c3c;
   margin-left: 4px;
+}
+
+/* 類題生成相關樣式 */
+.question-preview {
+  background-color: #f5f5f5;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #555;
+  border: 1px solid #ddd;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.help-text {
+  font-size: 12px;
+  color: #666;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* 任務進度區塊 */
+.tasks-container {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+}
+
+.tasks-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tasks-container h3 {
+  color: white;
+  margin: 0;
+}
+
+.close-tasks-btn {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s;
+}
+
+.close-tasks-btn:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.task-card {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.task-id {
+  font-weight: bold;
+  font-size: 14px;
+  color: #667eea;
+}
+
+.close-task-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.close-task-btn:hover {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.task-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.status-pending {
+  background-color: #f39c12;
+  color: white;
+}
+
+.status-processing {
+  background-color: #3498db;
+  color: white;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-completed {
+  background-color: #27ae60;
+  color: white;
+}
+
+.status-failed {
+  background-color: #e74c3c;
+  color: white;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.task-info {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.task-info p {
+  margin: 4px 0;
+  color: #555;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  background-color: #ecf0f1;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  transition: width 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.task-success {
+  padding: 10px;
+  background-color: #d5f4e6;
+  color: #27ae60;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.task-error {
+  padding: 10px;
+  background-color: #f8d7da;
+  color: #e74c3c;
+  border-radius: 6px;
+  font-size: 13px;
 }
 </style>

@@ -72,3 +72,18 @@ CREATE TABLE IF NOT EXISTS question (
   difficulty ENUM('容易', '中等', '困難', '魔王') NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- AI 題目生成任務佇列表
+CREATE TABLE IF NOT EXISTS generation_tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  source_question_id INT NOT NULL,
+  total_count INT NOT NULL,
+  completed_count INT DEFAULT 0,
+  status ENUM('pending', 'processing', 'completed', 'failed') DEFAULT 'pending',
+  error_message TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (source_question_id) REFERENCES question(id) ON DELETE CASCADE
+);

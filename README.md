@@ -6,6 +6,7 @@
 
 - 📚 **數學題庫管理**: 題目建立、編輯、分類
 - 🤖 **AI 智能生成**: 使用 Google Gemini 2.5 Flash 生成高品質數學題目
+- 🔄 **AI 類題生成佇列**: 背景任務佇列系統，批次生成 1-10 題類似題目，避免 HTTP timeout
 - 🎤 **語音合成**: Gemini TTS (主要) + OpenAI TTS (備用) 雙供應商架構
 - 🎥 **影片生成**: Remotion 數學解題影片自動生成 (支援 MathJax 公式渲染)
 - 📈 **數據分析**: 使用者答題統計和分析
@@ -166,6 +167,41 @@ PUT /api/questions/:id
 
 # 刪除題目
 DELETE /api/questions/:id
+```
+
+**AI 類題生成佇列**:
+```http
+# 建立任務 (批次生成 1-10 題類似題目)
+POST /api/generation-tasks
+{
+  "userId": 1,
+  "sourceQuestionId": 123,
+  "count": 5  // 1-10 題
+}
+Response: { taskId: 456 }
+
+# 查詢任務狀態
+GET /api/generation-tasks/:taskId
+Response: {
+  "id": 456,
+  "status": "pending|processing|completed|failed",
+  "total_count": 5,
+  "completed_count": 3,
+  "progress": 60,  // 百分比
+  "created_at": "2025-01-15T10:00:00Z"
+}
+
+# 取得使用者所有任務
+GET /api/generation-tasks/user/:userId
+Response: [
+  {
+    "id": 456,
+    "status": "completed",
+    "total_count": 5,
+    "completed_count": 5,
+    "source_content": "原題目內容預覽..."
+  }
+]
 ```
 
 **影片生成**:
@@ -366,7 +402,8 @@ Online-Math-Dictionary/
 │   ├── routes.js               # API 路由定義
 │   ├── index.js                # Express 伺服器進入點
 │   ├── aiConfig.js             # AI 生成設定與 Prompt
-│   ├── schema.sql              # 資料庫結構定義
+│   ├── TaskQueue.js            # AI 類題生成背景佇列處理器
+│   ├── schema.sql              # 資料庫結構定義 (含 generation_tasks 表)
 │   ├── migrate-passwords.js    # 密碼遷移工具
 │   ├── .env                    # 環境變數 (需自行建立)
 │   ├── .env.example            # 環境變數範本
@@ -427,6 +464,11 @@ Online-Math-Dictionary/
 *   `GET /api/video/file/:videoId`: 取得影片檔案
 *   `GET /api/video/:videoId`: 影片串流服務
 
+### AI 類題生成佇列
+*   `POST /api/generation-tasks`: 建立批次生成任務 (1-10 題)
+*   `GET /api/generation-tasks/:taskId`: 查詢任務狀態與進度
+*   `GET /api/generation-tasks/user/:userId`: 取得使用者所有任務
+
 ### 語音合成 (Gemini TTS + OpenAI TTS)
 *   `POST /api/tts/generate`: 文字轉語音 (自動優先使用 Gemini TTS)
   ```json
@@ -443,6 +485,20 @@ Online-Math-Dictionary/
 2.  選擇身份角色（學生/老師）
 3.  填寫基本資料並設定密碼
 4.  使用帳號密碼登入系統
+
+### AI 類題生成
+1.  在題目管理頁面選擇一個題目
+2.  點擊「產生類題」按鈕
+3.  選擇要生成的題目數量（1-10 題）
+4.  系統會建立背景任務，可繼續瀏覽其他頁面
+5.  任務完成後會自動刷新題目列表
+6.  生成的題目會標記「(AI生成)」
+
+**任務監控**:
+- 任務進度卡片會顯示當前生成進度
+- 點擊「✕」可關閉已完成或失敗的任務通知
+- 已關閉的任務不會重複出現
+- 每 3 秒自動更新進度
 
 ### 個人檔案
 *   登入後可在個人檔案頁面查看：
@@ -510,7 +566,26 @@ Remotion Studio 將在 `http://localhost:3000` 啟動 (與後端 API 衝突，�
   3. **JSON 修復**: 智能修復 Gemini 回傳的 JSON 格式 (包含 LaTeX 公式)。
   4. 將生成的題目存入資料庫。
 
-### 2. 語音合成 (TTS)
+### 2. AI 類題生成佇列
+
+- **API**: `POST /api/generation-tasks`
+- **模型**: `gemini-2.5-flash`
+- **架構**: 背景任務佇列系統 (TaskQueue.js)
+- **流程**:
+  1. 前端發送生成請求 (選擇 1-10 題)
+  2. 後端建立任務記錄於 `generation_tasks` 資料表
+  3. TaskQueue 每 5 秒輪詢 pending 任務
+  4. 逐題生成並儲存，更新進度 (completed_count/total_count)
+  5. 前端每 3 秒查詢任務狀態，顯示進度條
+  6. 任務完成後自動刷新題目列表
+- **特色**:
+  - 45 秒超時保護，最多重試 2 次
+  - 答案自動清理 (移除選項標記如 "(C):")
+  - 生成題目標記「(AI生成)」
+  - 支援 MathJax 數學公式渲染
+  - 使用者可在生成期間切換頁面
+
+### 3. 語音合成 (TTS)
 
 - **主要**: Gemini TTS (`gemini-2.5-flash`)
 - **備用**: OpenAI TTS

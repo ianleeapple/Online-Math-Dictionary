@@ -1116,5 +1116,149 @@ router.post('/tts/generate', async (req, res) => {
   }
 });
 
+// ==================== AI 題目生成任務管理 API ====================
+
+/**
+ * 建立類題生成任務
+ * POST /api/generation-tasks
+ */
+router.post('/generation-tasks', async (req, res) => {
+  const { userId, sourceQuestionId, count } = req.body;
+
+  // 驗證參數
+  if (!userId || !sourceQuestionId || !count) {
+    return res.status(400).json({ 
+      error: '缺少必要參數',
+      details: 'userId, sourceQuestionId, count 為必填'
+    });
+  }
+
+  // 限制數量 1-10
+  if (count < 1 || count > 10) {
+    return res.status(400).json({ 
+      error: '生成數量必須在 1-10 之間'
+    });
+  }
+
+  try {
+    // 檢查原始題目是否存在
+    const [questions] = await pool.query(
+      'SELECT * FROM question WHERE id = ?',
+      [sourceQuestionId]
+    );
+
+    if (questions.length === 0) {
+      return res.status(404).json({ error: '找不到原始題目' });
+    }
+
+    // 建立任務記錄
+    const [result] = await pool.query(
+      'INSERT INTO generation_tasks (user_id, source_question_id, total_count, completed_count, status) VALUES (?, ?, ?, 0, "pending")',
+      [userId, sourceQuestionId, count]
+    );
+
+    const taskId = result.insertId;
+
+    console.log(`[API] 已建立生成任務 #${taskId}，使用者 ${userId}，原始題目 ${sourceQuestionId}，數量 ${count}`);
+
+    res.json({
+      success: true,
+      taskId: taskId,
+      message: `已建立生成任務，將生成 ${count} 題類似題目`,
+      status: 'pending'
+    });
+
+  } catch (error) {
+    console.error('建立任務失敗:', error);
+    res.status(500).json({ 
+      error: '建立任務失敗',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * 查詢單一任務狀態
+ * GET /api/generation-tasks/:id
+ */
+router.get('/generation-tasks/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [tasks] = await pool.query(
+      'SELECT * FROM generation_tasks WHERE id = ?',
+      [id]
+    );
+
+    if (tasks.length === 0) {
+      return res.status(404).json({ error: '找不到該任務' });
+    }
+
+    const task = tasks[0];
+
+    res.json({
+      taskId: task.id,
+      userId: task.user_id,
+      sourceQuestionId: task.source_question_id,
+      totalCount: task.total_count,
+      completedCount: task.completed_count,
+      status: task.status,
+      errorMessage: task.error_message,
+      progress: Math.round((task.completed_count / task.total_count) * 100),
+      createdAt: task.created_at,
+      updatedAt: task.updated_at
+    });
+
+  } catch (error) {
+    console.error('查詢任務失敗:', error);
+    res.status(500).json({ 
+      error: '查詢任務失敗',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * 查詢使用者的所有任務
+ * GET /api/generation-tasks/user/:userId
+ */
+router.get('/generation-tasks/user/:userId', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const [tasks] = await pool.query(
+      `SELECT gt.*, q.content as source_content 
+       FROM generation_tasks gt
+       LEFT JOIN question q ON gt.source_question_id = q.id
+       WHERE gt.user_id = ?
+       ORDER BY gt.created_at DESC
+       LIMIT 50`,
+      [userId]
+    );
+
+    const formattedTasks = tasks.map(task => ({
+      taskId: task.id,
+      sourceQuestionId: task.source_question_id,
+      sourceContent: task.source_content ? task.source_content.substring(0, 50) + '...' : '',
+      totalCount: task.total_count,
+      completedCount: task.completed_count,
+      status: task.status,
+      progress: Math.round((task.completed_count / task.total_count) * 100),
+      errorMessage: task.error_message,
+      createdAt: task.created_at,
+      updatedAt: task.updated_at
+    }));
+
+    res.json(formattedTasks);
+
+  } catch (error) {
+    console.error('查詢使用者任務失敗:', error);
+    res.status(500).json({ 
+      error: '查詢使用者任務失敗',
+      details: error.message
+    });
+  }
+});
+
 
 module.exports = router;
