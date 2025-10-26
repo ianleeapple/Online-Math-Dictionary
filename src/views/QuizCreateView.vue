@@ -69,6 +69,8 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { useRouter } from 'vue-router';
+const router = useRouter();
 
 // 使用與 QuestionView 和 AddQuestionView 一致的資料結構
 const allConcepts = ref({
@@ -128,7 +130,6 @@ const allConcepts = ref({
 const difficulties = ['系統自動', '平均分配', '容易', '中等', '困難', '魔王'];
 const questionCounts = ['5 題', '10 題', '20 題', '25 題'];
 const timingOptions = [
-  { label: '系統建議', value: 'auto' },
   { label: '正向計時', value: 'forward' },
   { label: '倒數計時', value: 'countdown' },
   { label: '自訂倒數計時', value: 'custom' }
@@ -136,16 +137,14 @@ const timingOptions = [
 const questionTypes = [
   { label: '單選題', value: 'single' },
   { label: '多選題', value: 'multiple' },
-  { label: '選填題', value: 'fill-in' },
-  { label: '平均分配', value: 'average' },
-  { label: '系統自動', value: 'auto' }
+  { label: '選填題', value: 'fill' }
 ];
 const selectedLevel = ref('');
 const selectedTopic = ref('');
 const selectedConcept = ref('');
 const selectedDifficulty = ref('系統自動');
 const selectedCount = ref('5 題');
-const selectedTiming = ref('auto');
+const selectedTiming = ref('forward');
 const customTime = ref('');
 const selectedQuestionTypes = ref([]);
 const topics = computed(() => {
@@ -207,28 +206,31 @@ async function createQuiz() {
     return;
   }
   
-  const payload = {
-    level: selectedLevel.value,
-    topic: selectedTopic.value,
-    concept: selectedConcept.value,
-    difficulty: selectedDifficulty.value,
-    count: selectedCount.value,
-    timing: selectedTiming.value === 'custom' ? `custom-${customTime.value}` : selectedTiming.value,
-    questionTypes: selectedQuestionTypes.value
-  };
+  // 解析題數
+  const count = parseInt(selectedCount.value.split(' ')[0]);
   
-  try {
-    const res = await fetch('/api/quizzes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error('建立失敗');
-    const data = await res.json();
-    alert('建立成功！\n' + JSON.stringify(data, null, 2));
-  } catch (e) {
-    alert('建立失敗：' + e.message);
+  // 解析計時設定
+  let timingMode = selectedTiming.value;
+  let timeLimit = null;
+  if (selectedTiming.value === 'custom') {
+    timingMode = 'countdown';
+    timeLimit = parseInt(customTime.value);
   }
+  
+  // 導向測驗頁面，將篩選條件作為 query 參數傳遞
+  router.push({
+    name: 'quiz-taking',
+    query: {
+      level: selectedLevel.value,
+      topic: selectedTopic.value,
+      concept: selectedConcept.value,
+      difficulty: selectedDifficulty.value,
+      count: count,
+      timing: timingMode,
+      timeLimit: timeLimit,
+      types: selectedQuestionTypes.value.join(',')
+    }
+  });
 }
 </script>
 
