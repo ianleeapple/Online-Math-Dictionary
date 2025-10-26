@@ -33,7 +33,6 @@ class NarrativeScriptGenerator {
    - 使用台灣國語的自然語調,避免過於標準的中國普通話
    - 語氣要親切、輕鬆,不要過於嚴肅正式
    - 用口語化的方式表達,像是和朋友聊天一樣
-   - 特別是「概念解析」場景,要用日常對話的方式講解,不要太學術化
 6. **場景分割**:只有「步驟場景(steps)」需要分割,其他場景不分割
    - 步驟場景:每 5 個步驟分成一個場景 (type: "steps", "steps-2", "steps-3"...)
    - 如果第 5 個步驟內容較長(超過一行),允許延伸到 6-7 行
@@ -69,7 +68,7 @@ ${JSON.stringify(videoScript, null, 2)}
             "speed": "normal|slow"
           }
         ]
-      }0
+      }
     }
   ],
   "totalDuration": 總時長(秒)
@@ -113,11 +112,10 @@ ${JSON.stringify(videoScript, null, 2)}
 - 解題概念內容不要加編號,前端會自動處理
 
 【旁白範例】(使用台灣口語風格)：
-❌ 不好(太正式,像中國普通話)："我們來看這道題目。根據題意，x 的平方等於 9。"
-✅ 好(台灣口語,親切自然)："同學們<pause/>來看看這題齁<pause/>看起來簡單<pause/>但其實有個<emphasis>小陷阱</emphasis>喔。<pause/>我們一起想想看<pause/>x 的平方等於 9<pause/>那 x 會是多少呢？<pause duration='long'/>對啦<pause/>別忘了<emphasis>負數的平方也是正數</emphasis><pause/>所以答案有兩個喔。"
-
-❌ 不好(概念解析太學術化)："此題目考驗學生對複利公式的理解與應用，特別是需要反推初始本金。"
-✅ 好(概念解析口語化)："這題啊<pause/>主要是在考複利的概念<pause/>不過呢<pause/>跟平常不太一樣<pause/>這次是要反過來推算<pause/>算出一開始投入的本金是多少。"
+❌ 不好："我們來看這道題目。根據題意，x 的平方等於 9。"
+[旁白範例]：
+[不好]："我們來看這道題目。根據題意，x 的平方等於 9。"
+[好]："注意看<pause/>這道題目雖然簡單<pause/>但是藏著一個<emphasis>關鍵陷阱</emphasis>。<pause/>我們一起來思考<pause/>x 的平方等於 9<pause/>那 x 可能是多少呢？<pause duration='long'/>對了<pause/>別忘了<emphasis>負數的平方也是正數</emphasis><pause/>所以答案有兩個。"
 
 請生成旁白腳本：`;
 

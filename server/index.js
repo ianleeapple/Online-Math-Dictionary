@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const routes = require('./routes');
+const TaskQueue = require('./TaskQueue');
 require('dotenv').config();
 
 const app = express();
@@ -41,6 +42,23 @@ app.use((err, req, res, next) => {
     error: err.message 
   });
 });
+
+// 初始化並啟動任務佇列處理器
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'math_platform'
+};
+
+try {
+  const taskQueue = new TaskQueue(dbConfig);
+  taskQueue.start();
+  console.log('[TaskQueue] AI 題目生成佇列已啟動');
+} catch (error) {
+  console.error('[TaskQueue] 啟動失敗:', error.message);
+  console.error('將繼續運行伺服器，但 AI 生成功能將無法使用');
+}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
