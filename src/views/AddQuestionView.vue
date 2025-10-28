@@ -41,12 +41,7 @@
       <!-- 新增：題目附圖 -->
       <div class="form-group">
         <label><h3>題目附圖（選填）</h3></label>
-        <input 
-          type="file" 
-          @change="handleImageUpload" 
-          accept=".png,.jpg,.jpeg"
-          ref="fileInput"
-        />
+        <input type="file" @change="handleImageUpload" accept=".png,.jpg,.jpeg" ref="fileInput"/>
         <div v-if="newQuestion.imagePreview" class="image-preview">
           <img :src="newQuestion.imagePreview" alt="預覽圖" />
           <button class="btn remove-btn" @click="removeImage">移除圖片</button>
@@ -61,6 +56,36 @@
           <option value="multiple">多選題</option>
           <option value="fill">選填題</option>
         </select>
+      </div>
+
+      <!-- 答案欄位 -->
+      <div class="form-group">
+        <label><h3>答案</h3></label>
+        
+        <!-- 單選題(4個選項) -->
+        <div v-if="newQuestion.type === 'single'" class="answer-options">
+          <label v-for="option in ['A', 'B', 'C', 'D']" :key="option" class="radio-option">
+            <input type="radio" :value="option" v-model="newQuestion.answer" />
+            {{ option }}
+          </label>
+        </div>
+
+        <!-- 多選題(5個選項) -->
+        <div v-else-if="newQuestion.type === 'multiple'" class="answer-options">
+          <label v-for="option in ['A', 'B', 'C', 'D', 'E']" :key="option" class="checkbox-option">
+            <input type="checkbox" :value="option" :checked="multipleAnswers.includes(option)"@change="toggleMultipleAnswer(option)"/>
+            {{ option }}
+          </label>
+        </div>
+
+        <!-- 選填題(暫定輸入框) -->
+        <div v-else-if="newQuestion.type === 'fill'">
+          <input 
+            type="text" 
+            v-model="newQuestion.answer" 
+            placeholder="請輸入答案"
+          />
+        </div>
       </div>
 
       <!-- 難易度選單 -->
@@ -155,6 +180,12 @@ const newQuestion = ref({
   imagePreview: null,
 });
 
+// 多選題答案陣列
+const multipleAnswers = ref([]);
+
+// 新增題目附圖預設值
+const fileInput = ref(null);
+
 // topics 由 selectedLevel 計算
 const topics = computed(() => {
   if (!selectedLevel.value) return [];
@@ -186,17 +217,47 @@ function handleImageUpload(event) {
     newQuestion.value.imagePreview = URL.createObjectURL(file);
   }
 }
+
 function removeImage() {
+  // 清除圖片資料
   newQuestion.value.imageFile = null;
   newQuestion.value.imagePreview = null;
-  if (fileInput.value) fileInput.value.value = '';
+
+  // 移除檔名顯示
+  if (fileInput.value) {
+    fileInput.value.value = '';
+  }
 }
+
+function toggleMultipleAnswer(option) {
+  const index = multipleAnswers.value.indexOf(option);
+  if (index > -1) {
+    multipleAnswers.value.splice(index, 1);
+  } else {
+    multipleAnswers.value.push(option);
+  }
+  // 排序並組合為字串 (例如: "A,C,E")
+  multipleAnswers.value.sort();
+  newQuestion.value.answer = multipleAnswers.value.join(',');
+}
+
+// 監聽題型變化，重置答案
+watch(() => newQuestion.value.type, (newType) => {
+  newQuestion.value.answer = '';
+  multipleAnswers.value = [];
+});
+
 async function addQuestion() {
   if (!selectedLevel.value) return alert('請選擇範圍');
   if (!newQuestion.value.text.trim()) return alert('請輸入題目內容');
   if (!selectedTopic.value) return alert('請選擇主題');
   if (!selectedConcept.value) return alert('請選擇觀念');
   if (!selectedDifficulty.value) return alert('請選擇難易度');
+  
+  // 檢查答案欄位是否已填寫
+  if (!newQuestion.value.answer || newQuestion.value.answer.trim() === '') {
+    return alert('請選擇或填寫答案');
+  }
 
   const formData = new FormData();
   formData.append('level', selectedLevel.value);
@@ -231,6 +292,13 @@ async function addQuestion() {
       imageFile: null,
       imagePreview: null
     };
+    multipleAnswers.value = [];
+
+    // 移除檔名顯示
+    if (fileInput.value) {
+      fileInput.value.value = '';
+    }
+    
     selectedLevel.value = '';
     selectedTopic.value = '';
     selectedConcept.value = '';
@@ -320,6 +388,39 @@ h2 { margin-bottom: 20px; }
   position: absolute;
   top: 10px;
   right: 10px;
-  background: rgba(255,0,0,0.7);
+  background: #d67b7b;
+}
+
+.answer-options {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.radio-option,
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.radio-option:hover,
+.checkbox-option:hover {
+  background-color: #f0f0f0;
+  border-color: #d67b7b;
+}
+
+.radio-option input,
+.checkbox-option input {
+  cursor: pointer;
+  width: auto;
+  padding: 0;
+  margin: 0;
 }
 </style>

@@ -127,8 +127,28 @@
         </div>
 
         <div class="form-group">
-          <label>答案（選填）</label>
-          <input type="text" v-model="editForm.answer" placeholder="請輸入答案" />
+          <label>答案 <span class="required">*</span></label>
+          
+          <!-- 單選題：4個選項 -->
+          <div v-if="editForm.type === 'single'" class="answer-options">
+            <label v-for="option in ['A', 'B', 'C', 'D']" :key="option" class="radio-option">
+              <input type="radio" :value="option" v-model="editForm.answer" />
+              {{ option }}
+            </label>
+          </div>
+
+          <!-- 多選題：5個選項 -->
+          <div v-else-if="editForm.type === 'multiple'" class="answer-options">
+            <label v-for="option in ['A', 'B', 'C', 'D', 'E']" :key="option" class="checkbox-option">
+              <input type="checkbox" :value="option" :checked="editMultipleAnswers.includes(option)"@change="toggleEditMultipleAnswer(option)"/>
+              {{ option }}
+            </label>
+          </div>
+
+          <!-- 選填題：輸入框 -->
+          <div v-else-if="editForm.type === 'fill'">
+            <input type="text" v-model="editForm.answer" placeholder="請輸入答案"required/>
+          </div>
         </div>
 
         <div class="form-group">
@@ -400,6 +420,9 @@ const editForm = ref({
   difficulty: ''
 });
 
+// 編輯時的多選題答案陣列
+const editMultipleAnswers = ref([]);
+
 const editTopics = computed(() => {
   if (!editForm.value.level) return [];
   return Object.keys(allConcepts.value[editForm.value.level] || {});
@@ -426,13 +449,35 @@ watch(() => editForm.value.topic, () => {
   }
 });
 
+// 切換編輯時的多選題答案
+function toggleEditMultipleAnswer(option) {
+  const index = editMultipleAnswers.value.indexOf(option);
+  if (index > -1) {
+    editMultipleAnswers.value.splice(index, 1);
+  } else {
+    editMultipleAnswers.value.push(option);
+  }
+  // 排序並組合為字串
+  editMultipleAnswers.value.sort();
+  editForm.value.answer = editMultipleAnswers.value.join(',');
+}
+
+// 監聽編輯表單的題型變化
+watch(() => editForm.value.type, (newType, oldType) => {
+  // 只在非初始化時清空答案
+  if (!isEditingInit.value && oldType) {
+    editForm.value.answer = '';
+    editMultipleAnswers.value = [];
+  }
+});
+
 function editQuestion(question) {
   editingQuestion.value = question;
   
-  // 設定初始化標記，防止 watch 清空值
+  // 設定初始化標記
   isEditingInit.value = true;
   
-  // 確保所有欄位都正確填入
+  // 填入表單資料
   editForm.value = {
     id: question.id,
     level: question.level || '',
@@ -444,7 +489,13 @@ function editQuestion(question) {
     difficulty: question.difficulty || '中等'
   };
   
-  // 使用 nextTick 確保 DOM 更新後再解除標記
+  // 如果是多選題，解析答案為陣列
+  if (question.type === 'multiple' && question.answer) {
+    editMultipleAnswers.value = question.answer.split(',').map(a => a.trim());
+  } else {
+    editMultipleAnswers.value = [];
+  }
+  
   setTimeout(() => {
     isEditingInit.value = false;
   }, 100);
@@ -455,6 +506,7 @@ function editQuestion(question) {
 function cancelEdit() {
   editingQuestion.value = null;
   isEditingInit.value = false;
+  editMultipleAnswers.value = [];
   editForm.value = {
     id: null,
     level: '',
@@ -471,6 +523,12 @@ async function saveEdit() {
   if (!editForm.value.level || !editForm.value.topic || !editForm.value.concept || 
       !editForm.value.content || !editForm.value.type || !editForm.value.difficulty) {
     alert('請填寫所有必填欄位');
+    return;
+  }
+
+  // 檢查答案欄位是否已填寫
+  if (!editForm.value.answer || editForm.value.answer.trim() === '') {
+    alert('請選擇或填寫答案');
     return;
   }
 
@@ -1029,6 +1087,38 @@ h2 { margin-bottom: 20px; }
   margin-left: 4px;
 }
 
+.answer-options {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.radio-option,
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.radio-option:hover,
+.checkbox-option:hover {
+  background-color: #f0f0f0;
+  border-color: #d67b7b;
+}
+
+.radio-option input,
+.checkbox-option input {
+  cursor: pointer;
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
 /* 類題生成相關樣式 */
 .question-preview {
   background-color: #f5f5f5;
