@@ -35,7 +35,7 @@
       <!-- 題目內容 -->
       <div class="form-group">
         <label><h3>題目內容</h3></label>
-        <textarea v-model="newQuestion.text" rows="3" placeholder="請輸入題目"></textarea>
+        <textarea v-model="newQuestion.text" rows="6" placeholder="請輸入題目&#10;若題目為單選題，請確保題目為四個選項。&#10;若題目為多選題，請確保題目為五個選項。&#10;並且選項請以英文字母大寫依序命名。"></textarea>
       </div>
 
       <!-- 新增：題目附圖 -->
@@ -285,6 +285,12 @@ h2 { margin-bottom: 20px; }
   border-radius: 6px;
   box-sizing: border-box;
 }
+
+/* 讓 textarea 的 placeholder 可以換行顯示 */
+.form-group textarea::placeholder {
+  white-space: pre-line;
+}
+
 .btn {
   background-color: #d67b7b;
   color: white;

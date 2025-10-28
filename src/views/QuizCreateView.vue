@@ -29,6 +29,7 @@
         <div class="form-group">
           <label><h3>難易度</h3></label>
           <select v-model="selectedDifficulty">
+            <option disabled value="">請選擇難易度</option>
             <option v-for="level in difficulties" :key="level">{{ level }}</option>
           </select>
         </div>
@@ -127,11 +128,11 @@ const allConcepts = ref({
   }
 });
 
-const difficulties = ['系統自動', '平均分配', '容易', '中等', '困難', '魔王'];
+const difficulties = ['系統自動', '容易', '中等', '困難', '魔王'];
 const questionCounts = ['5 題', '10 題', '20 題', '25 題'];
 const timingOptions = [
   { label: '正向計時', value: 'forward' },
-  { label: '倒數計時', value: 'countdown' },
+  { label: '系統建議倒數計時', value: 'countdown' },
   { label: '自訂倒數計時', value: 'custom' }
 ];
 const questionTypes = [
@@ -164,6 +165,7 @@ watch(selectedTopic, () => {
   selectedConcept.value = '';
 });
 async function createQuiz() {
+  
   // 驗證所有必要欄位
   const errors = [];
   
@@ -206,31 +208,110 @@ async function createQuiz() {
     return;
   }
   
+  // ========== 新增：檢查題目數量是否足夠 ==========
+  try {
+    // 建立 API 查詢參數
+    const params = new URLSearchParams();
+    if (selectedLevel.value) params.append('level', selectedLevel.value);
+    if (selectedTopic.value) params.append('topic', selectedTopic.value);
+    if (selectedConcept.value && selectedConcept.value !== '所有觀念') {
+      params.append('concept', selectedConcept.value);
+    }
+    if (selectedDifficulty.value) params.append('difficulty', selectedDifficulty.value);
+
+    console.log('檢查題目數量，API 查詢參數:', params.toString());
+
+    // 從 API 抓取符合條件的題目
+    const response = await fetch(`/api/question?${params.toString()}`);
+    
+    if (!response.ok) {
+      throw new Error('無法檢查題目數量');
+    }
+
+    const data = await response.json();
+    console.log('符合條件的題目總數:', data.length);
+
+    // 篩選題型
+    let filteredQuestions = data;
+    if (selectedQuestionTypes.value.length > 0) {
+      filteredQuestions = data.filter(q => selectedQuestionTypes.value.includes(q.type));
+      console.log('題型篩選後題目數量:', filteredQuestions.length);
+    }
+
+    // 檢查數量
+    const requestedCount = parseInt(selectedCount.value.split(' ')[0]);
+    
+    if (filteredQuestions.length === 0) {
+      alert('找不到符合條件的題目！\n\n請調整篩選條件後重試。');
+      return;
+    }
+    
+    if (filteredQuestions.length < requestedCount) {
+      alert(
+        `題目數量不足！\n\n` +
+        `欲作答題目數量：${requestedCount} 題\n` +
+        `目前符合條件的題目：${filteredQuestions.length} 題\n\n` +
+        `請調整篩選條件後重試。`
+      );
+      return;
+    }
+
+    console.log('題目數量檢查通過，準備建立測驗');
+
+  } catch (error) {
+    console.error('檢查題目數量失敗:', error);
+    alert('無法檢查題目數量，請稍後再試');
+    return;
+  }
+  
+  // ========== 題目數量檢查通過，開始建立測驗 ==========
+  
   // 解析題數
   const count = parseInt(selectedCount.value.split(' ')[0]);
   
   // 解析計時設定
   let timingMode = selectedTiming.value;
   let timeLimit = null;
+  
   if (selectedTiming.value === 'custom') {
     timingMode = 'countdown';
     timeLimit = parseInt(customTime.value);
+  } else if (selectedTiming.value === 'countdown') {
+    // 系統建議倒數計時：每題 5 分鐘
+    timeLimit = count * 5;
   }
   
-  // 導向測驗頁面，將篩選條件作為 query 參數傳遞
-  router.push({
-    name: 'quiz-taking',
-    query: {
-      level: selectedLevel.value,
-      topic: selectedTopic.value,
-      concept: selectedConcept.value,
-      difficulty: selectedDifficulty.value,
-      count: count,
-      timing: timingMode,
-      timeLimit: timeLimit,
-      types: selectedQuestionTypes.value.join(',')
-    }
+  console.log('準備導向測驗頁面，參數:', {
+    level: selectedLevel.value,
+    topic: selectedTopic.value,
+    concept: selectedConcept.value,
+    difficulty: selectedDifficulty.value,
+    count: count,
+    timing: timingMode,
+    timeLimit: timeLimit,
+    types: selectedQuestionTypes.value.join(',')
   });
+  
+  try {
+    // 導向測驗頁面，將篩選條件作為 query 參數傳遞
+    await router.push({
+      name: 'QuizTaking',
+      query: {
+        level: selectedLevel.value,
+        topic: selectedTopic.value,
+        concept: selectedConcept.value,
+        difficulty: selectedDifficulty.value,
+        count: count,
+        timing: timingMode,
+        timeLimit: timeLimit || undefined, // 沒有時間限制就不傳
+        types: selectedQuestionTypes.value.join(',')
+      }
+    });
+    console.log('路由跳轉成功');
+  } catch (error) {
+    console.error('路由跳轉失敗:', error);
+    alert('頁面跳轉失敗: ' + error.message);
+  }
 }
 </script>
 

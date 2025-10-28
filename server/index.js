@@ -27,8 +27,9 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-// 靜態檔案服務
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// 靜態檔案服務 - 提供 uploads 資料夾的圖片
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+console.log('[靜態檔案] 圖片服務已啟用:', path.join(__dirname, 'uploads'));
 
 // API 路由
 app.use('/api', routes);
@@ -64,6 +65,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`伺服器運行於 port ${PORT}`);
   console.log(`API 端點: http://localhost:${PORT}/api`);
+  console.log(`圖片存取: http://localhost:${PORT}/uploads/檔名`);
 });
 
 // 404 處理

@@ -217,7 +217,8 @@ router.get('/question', async (req, res) => {
       query += ' AND concept = ?';
       params.push(concept);
     }
-    if (difficulty) {
+    // 當難度為「系統自動」時，不篩選難度（查詢所有難度）
+    if (difficulty && difficulty !== '系統自動') {
       query += ' AND difficulty = ?';
       params.push(difficulty);
     }
