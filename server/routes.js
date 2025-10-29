@@ -662,8 +662,297 @@ router.delete('/classes/:classId/leave/:studentId', async (req, res) => {
   }
 });
 
-module.exports = router;
+// ==================== 測驗記錄相關 API ====================
 
+ // 提交測驗記錄
+ // POST /api/quiz-records
+router.post('/quiz-records', async (req, res) => {
+  const {
+    userId,
+    submitTime,
+    topic,
+    concept,
+    timingMode,
+    answerTime,
+    timeLimit, // 新增:倒數計時的時間限制(分鐘)
+    difficulty,
+    questionCount,
+    questionTypes,
+    questions // 陣列：[{ questionId, questionOrder, userAnswer }, ...]
+  } = req.body;
+
+  // 驗證必要參數
+  if (!userId || !submitTime || !topic || !concept || 
+      !timingMode || answerTime === undefined || !difficulty || 
+      !questionCount || !questionTypes || !questions) {
+    return res.status(400).json({
+      success: false,
+      message: '缺少必要參數'
+    });
+  }
+
+  const connection = await pool.getConnection();
+  
+  try {
+    await connection.beginTransaction();
+
+    // 插入測驗記錄主表(新增 time_limit 欄位)
+    const [recordResult] = await connection.execute(
+      `INSERT INTO quiz_records 
+       (user_id, submit_time, topic, concept, timing_mode, answer_time, time_limit, difficulty, question_count, question_types, score, corrected)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, FALSE)`,
+      [userId, submitTime, topic, concept, timingMode, answerTime, timeLimit || null, difficulty, questionCount, questionTypes]
+    );
+
+    const quizRecordId = recordResult.insertId;
+    // 插入測驗明細(每題的答案)
+    for (const q of questions) {
+      await connection.execute(
+        `INSERT INTO quiz_record_details 
+         (quiz_record_id, question_order, question_id, user_answer)
+         VALUES (?, ?, ?, ?)`,
+        [quizRecordId, q.questionOrder, q.questionId, q.userAnswer || null]
+      );
+    }
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: '測驗記錄已儲存',
+      quizRecordId: quizRecordId
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('儲存測驗記錄失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '儲存測驗記錄失敗',
+      error: error.message
+    });
+  } finally {
+    connection.release();
+  }
+});
+
+// 取得使用者的所有測驗記錄
+// GET /api/quiz-records/user/:userId
+router.get('/quiz-records/user/:userId', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const [records] = await pool.query(
+      `SELECT * FROM quiz_records 
+       WHERE user_id = ? 
+       ORDER BY submit_time DESC`,
+      [userId]
+    );
+
+    res.json(records);
+
+  } catch (error) {
+    console.error('查詢測驗記錄失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '查詢測驗記錄失敗',
+      error: error.message
+    });
+  }
+});
+
+// 取得單一測驗記錄的詳細資料(含題目和答案)
+// GET /api/quiz-records/:id
+router.get('/quiz-records/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // 取得測驗記錄主表
+    const [records] = await pool.query(
+      'SELECT * FROM quiz_records WHERE id = ?',
+      [id]
+    );
+
+    if (records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該測驗記錄'
+      });
+    }
+
+    const record = records[0];
+
+    // 取得測驗明細(題目和答案)
+    const [details] = await pool.query(
+      `SELECT qrd.*, q.content, q.type, q.answer as correct_answer, q.difficulty as question_difficulty
+       FROM quiz_record_details qrd
+       JOIN question q ON qrd.question_id = q.id
+       WHERE qrd.quiz_record_id = ?
+       ORDER BY qrd.question_order`,
+      [id]
+    );
+
+    record.questions = details;
+
+    res.json(record);
+
+  } catch (error) {
+    console.error('查詢測驗記錄詳情失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '查詢測驗記錄詳情失敗',
+      error: error.message
+    });
+  }
+});
+
+// 批改單一測驗記錄並計算成績
+// POST /api/quiz-records/:id/grade
+router.post('/quiz-records/:id/grade', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // 取得測驗記錄
+    const [records] = await pool.query(
+      'SELECT * FROM quiz_records WHERE id = ?',
+      [id]
+    );
+
+    if (records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該測驗記錄'
+      });
+    }
+
+    const record = records[0];
+
+    // 取得測驗明細（題目、使用者答案、正確答案）
+    const [details] = await pool.query(
+      `SELECT qrd.question_id, qrd.user_answer, q.answer as correct_answer, q.type
+       FROM quiz_record_details qrd
+       JOIN question q ON qrd.question_id = q.id
+       WHERE qrd.quiz_record_id = ?
+       ORDER BY qrd.question_order`,
+      [id]
+    );
+
+    if (details.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '該測驗沒有任何題目'
+      });
+    }
+
+    // 計算成績
+    const totalQuestions = details.length;
+    const pointsPerQuestion = 100 / totalQuestions; // 每題分數
+    let totalScore = 0;
+    let correctCount = 0;
+
+    details.forEach(detail => {
+      const { user_answer, correct_answer, type } = detail;
+      let questionScore = 0;
+
+      if (type === 'single') {
+        // 單選題(答對得分，答錯或未作答不得分)
+        if (user_answer && user_answer.trim() === correct_answer.trim()) {
+          questionScore = pointsPerQuestion;
+          correctCount++;
+        }
+      } else if (type === 'multiple') {
+        // 多選題(每個選項平均配分)
+        if (!user_answer || user_answer.trim() === '') {
+          // 未作答，不給分
+          questionScore = 0;
+        } else {
+          const userAnswers = user_answer.split(',').map(a => a.trim()).sort();
+          const correctAnswers = correct_answer.split(',').map(a => a.trim()).sort();
+          
+          // 多選題有 5 個選項(A~E)
+          const allOptions = ['A', 'B', 'C', 'D', 'E'];
+          const pointsPerOption = pointsPerQuestion / allOptions.length; // 每個選項的分數
+          
+          allOptions.forEach(option => {
+            const shouldSelect = correctAnswers.includes(option); // 是否應該選
+            const didSelect = userAnswers.includes(option); // 使用者是否有選
+            
+            // 該選且有選 或 不該選且沒選 => 得分
+            if (shouldSelect === didSelect) {
+              questionScore += pointsPerOption;
+            }
+          });
+          // 檢查是否全對
+          if (JSON.stringify(userAnswers) === JSON.stringify(correctAnswers)) {
+            correctCount++;
+          }
+        }
+      } else if (type === 'fill') {
+        // 選填題(答案完全相同才得分)
+        if (user_answer && user_answer.trim() === correct_answer.trim()) {
+          questionScore = pointsPerQuestion;
+          correctCount++;
+        }
+      }
+
+      totalScore += questionScore;
+    });
+
+    // 四捨五入到整數
+    const finalScore = Math.round(totalScore);
+
+    // 更新測驗記錄的成績
+    await pool.query(
+      'UPDATE quiz_records SET score = ? WHERE id = ?',
+      [finalScore, id]
+    );
+
+    console.log(`[批改] 測驗 #${id} 批改完成，成績: ${finalScore} 分 (答對 ${correctCount}/${totalQuestions} 題)`);
+
+    res.json({
+      success: true,
+      message: '批改完成',
+      score: finalScore,
+      correctCount: correctCount,
+      totalQuestions: totalQuestions,
+      accuracy: Math.round((correctCount / totalQuestions) * 100)
+    });
+
+  } catch (error) {
+    console.error('批改測驗失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '批改測驗失敗',
+      error: error.message
+    });
+  }
+});
+
+// 取得單一題目
+router.get('/question/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const [rows] = await pool.query('SELECT * FROM question WHERE id = ?', [id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: '找不到該題目' 
+      });
+    }
+    
+    res.json(rows[0]);
+    
+  } catch (error) {
+    console.error('查詢題目失敗:', error);
+    res.status(500).json({ 
+      success: false,
+      message: '資料庫錯誤', 
+      error: error.message 
+    });
+  }
+});
 
 
 const aiConfig = require('./aiConfig');
@@ -1260,6 +1549,5 @@ router.get('/generation-tasks/user/:userId', async (req, res) => {
     });
   }
 });
-
 
 module.exports = router;

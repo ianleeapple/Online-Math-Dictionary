@@ -201,22 +201,125 @@ async function submitExam(autoSubmit = false) {
 
   try {
     const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    
+    if (!currentUser.id) {
+      alert('請先登入');
+      return;
+    }
  
     // 中途離開測驗提醒(標記測驗已完成不再需要離開提醒)
     isExamCompleted.value = true;
 
-    // 根據交卷類型顯示不同訊息
-    if (autoSubmit === true) {
-      alert('測驗已自動提交');
-    } else {
-      alert('交卷成功!');
+    // 準備測驗記錄資料
+    const now = new Date();
+    const submitTime = now.toISOString().slice(0, 19).replace('T', ' '); // YYYY-MM-DD HH:MM:SS
+    
+    // 準備題目明細資料
+    const questionsData = questions.value.map((q, index) => ({
+      questionId: q.id,
+      questionOrder: index + 1,
+      userAnswer: formatAnswer(answers.value[index], q.type)
+    }));
+
+    // 計算實際的時間限制(分鐘)
+    let timeLimitMinutes = null;
+    if (isCountdown.value && timeLimit.value > 0) {
+      timeLimitMinutes = Math.round(timeLimit.value / 60); // 秒轉分鐘
+    }
+
+    // 提交測驗記錄到後端
+    const response = await fetch('/api/quiz-records', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userId: currentUser.id,
+        submitTime: submitTime,
+        topic: quizInfo.value.topic,
+        concept: quizInfo.value.concept,
+        timingMode: quizInfo.value.timingMode,
+        answerTime: timer.value, // 作答時間（秒）
+        timeLimit: timeLimitMinutes, // 倒數計時的時間限制（分鐘）
+        difficulty: quizInfo.value.difficulty,
+        questionCount: quizInfo.value.questionCount,
+        questionTypes: questions.value.map(q => q.type).filter((v, i, a) => a.indexOf(v) === i).join(','),
+        questions: questionsData
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('儲存測驗記錄失敗');
+    }
+
+    const result = await response.json();
+    const quizRecordId = result.quizRecordId;
+    console.log('測驗記錄已儲存，ID:', quizRecordId);
+
+    // 自動批改考卷並計算成績
+    try {
+      console.log('開始批改考卷...');
+      const gradeResponse = await fetch(`/api/quiz-records/${quizRecordId}/grade`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (gradeResponse.ok) {
+        const gradeResult = await gradeResponse.json();
+        console.log('批改完成:', gradeResult);
+        
+        // 根據交卷類型顯示不同訊息
+        if (autoSubmit === true) {
+          alert(
+            `測驗已自動提交\n\n` +
+            `成績：${gradeResult.score} 分\n` +
+            `完全答對：${gradeResult.correctCount} / ${gradeResult.totalQuestions} 題\n`
+          );
+        } else {
+          alert(
+            `交卷成功！\n\n` +
+            `成績：${gradeResult.score} 分\n` +
+            `完全答對：${gradeResult.correctCount} / ${gradeResult.totalQuestions} 題\n`
+          );
+        }
+      } else {
+        throw new Error('批改失敗');
+      }
+    } catch (gradeError) {
+      console.error('批改失敗:', gradeError);
+      // 即使批改失敗，仍然導向測驗記錄頁面
+      alert('交卷成功，但批改時發生錯誤，請稍後手動批改');
     }
     
     router.push('/quiz/records');
 
   } catch (error) {
-    alert('提交失敗，請稍後再試');
+    console.error('提交測驗失敗:', error);
+    alert('提交失敗，請稍後再試: ' + error.message);
   }
+}
+
+// 格式化答案（根據題型）
+function formatAnswer(answer, type) {
+  if (type === 'multiple') {
+    // 多選題：陣列轉字串 [0, 2] -> "A,C"
+    if (Array.isArray(answer)) {
+      return answer.map(idx => String.fromCharCode(65 + idx)).join(',');
+    }
+    return '';
+  } else if (type === 'single') {
+    // 單選題：索引轉字母 0 -> "A"
+    if (answer !== null && answer !== undefined) {
+      return String.fromCharCode(65 + answer);
+    }
+    return '';
+  } else if (type === 'fill') {
+    // 選填題：直接返回文字
+    return answer || '';
+  }
+  return '';
 }
 
 // 啟動計時器
@@ -249,16 +352,27 @@ async function loadQuizData() {
   
   try {
     // 從 route.query 取得篩選條件
-    const { level, topic, concept, difficulty, count, timing, timeLimit: timeLimitParam, types } = route.query;
+    const { 
+      retake, 
+      questionIds, 
+      level, 
+      topic, 
+      concept, 
+      difficulty, 
+      count, 
+      timing, 
+      timeLimit: timeLimitParam, 
+      types 
+    } = route.query;
     
-    console.log('篩選條件:', { level, topic, concept, difficulty, count, types, timing, timeLimit: timeLimitParam });
+    console.log('篩選條件:', { retake, questionIds, level, topic, concept, difficulty, count, types, timing, timeLimit: timeLimitParam });
     
     // 設定計時模式
     isCountdown.value = timing === 'countdown';
     if (isCountdown.value && timeLimitParam) {
-      // 將分鐘轉換為秒
-      timeLimit.value = parseInt(timeLimitParam) * 60;
-      console.log('倒數計時模式，時間限制:', timeLimit.value, '秒 (', timeLimitParam, '分鐘)');
+      // ========== 關鍵修正：timeLimit 是以分鐘儲存，需要轉換成秒 ==========
+      timeLimit.value = parseInt(timeLimitParam) * 60; // 分鐘轉換成秒
+      console.log('倒數計時模式,時間限制:', timeLimit.value, '秒 (', timeLimitParam, '分鐘)');
     }
     
     // 更新測驗資訊
@@ -271,73 +385,131 @@ async function loadQuizData() {
       timingMode: timing || 'forward'
     };
 
-    // 建立 API 查詢參數
-    const params = new URLSearchParams();
-    if (level) params.append('level', level);
-    if (topic) params.append('topic', topic);
-    if (concept && concept !== '所有觀念') params.append('concept', concept);
-    if (difficulty) params.append('difficulty', difficulty);
+    // ========== 再做一次功能使用指定的題目列表 ==========
+    if (retake === 'true' && questionIds) {
+      console.log('📝 再做一次功能:載入指定題目');
 
-    console.log('API 查詢參數:', params.toString());
+      const idArray = questionIds.split(',').map(id => parseInt(id));
+      console.log('題目 ID 列表:', idArray);
+      
+      // 逐一取得每個題目(保持順序)
+      const fetchedQuestions = [];
+      
+      for (const id of idArray) {
+        try {
+          const response = await fetch(`/api/question/${id}`);
+          
+          if (!response.ok) {
+            console.warn(`題目 #${id} 載入失敗`);
+            continue;
+          }
+          
+          const question = await response.json();
+          fetchedQuestions.push(question);
+          
+        } catch (error) {
+          console.error(`載入題目 #${id} 失敗:`, error);
+        }
+      }
+      
+      console.log('成功載入題目數量:', fetchedQuestions.length);
+      
+      if (fetchedQuestions.length === 0) {
+        alert('無法載入題目,請返回測驗記錄頁面重試');
+        router.push('/quiz/records');
+        return;
+      }
+      
+      // 將題目轉換為測驗格式(保持原有順序)
+      questions.value = fetchedQuestions.map(q => ({
+        id: q.id,
+        content: q.content,
+        type: q.type,
+        answer: q.answer,
+        difficulty: q.difficulty,
+        image_url: q.image_url,
+        options: q.type === 'single' 
+          ? ['(A)', '(B)', '(C)', '(D)'] 
+          : q.type === 'multiple'
+          ? ['(A)', '(B)', '(C)', '(D)', '(E)']
+          : null
+      }));
+      
+      console.log('重考模式:題目已載入,順序保持不變');
+      console.log('計時設定:', {
+        isCountdown: isCountdown.value,
+        timeLimit: timeLimit.value,
+        timeLimitMinutes: timeLimitParam
+      });
+      
+    } 
+    // ========== 一般模式:從 API 隨機抓取題目 ==========
+    else {
+      console.log('📝 一般模式:隨機抓取題目');
+      
+      // 建立 API 查詢參數
+      const params = new URLSearchParams();
+      if (level) params.append('level', level);
+      if (topic) params.append('topic', topic);
+      if (concept && concept !== '所有觀念') params.append('concept', concept);
+      if (difficulty) params.append('difficulty', difficulty);
 
-    // 從 API 抓取題目
-    const response = await fetch(`/api/question?${params.toString()}`);
-    
-    if (!response.ok) {
-      throw new Error('抓取題目失敗');
+      console.log('API 查詢參數:', params.toString());
+
+      // 從 API 抓取題目
+      const response = await fetch(`/api/question?${params.toString()}`);
+      
+      if (!response.ok) {
+        throw new Error('抓取題目失敗');
+      }
+
+      const data = await response.json();
+      console.log('從 API 取得題目數量:', data.length);
+
+      // 篩選題型(如果有指定)
+      let filteredQuestions = data;
+      if (types) {
+        const typeList = types.split(',');
+        filteredQuestions = data.filter(q => typeList.includes(q.type));
+        console.log('題型篩選後題目數量:', filteredQuestions.length);
+      }
+
+      const requestedCount = parseInt(count) || 10;
+      
+      if (filteredQuestions.length === 0) {
+        alert('找不到符合條件的題目');
+        loading.value = false;
+        router.push('/quiz/create');
+        return;
+      }
+
+      // 隨機打亂陣列並取指定數量
+      filteredQuestions = filteredQuestions.sort(() => Math.random() - 0.5);
+      filteredQuestions = filteredQuestions.slice(0, requestedCount);
+
+      console.log('最終題目數量:', filteredQuestions.length);
+
+      // 將題目轉換為測驗格式
+      questions.value = filteredQuestions.map(q => ({
+        id: q.id,
+        content: q.content,
+        type: q.type,
+        answer: q.answer,
+        difficulty: q.difficulty,
+        image_url: q.image_url,
+        options: q.type === 'single' 
+          ? ['(A)', '(B)', '(C)', '(D)'] 
+          : q.type === 'multiple'
+          ? ['(A)', '(B)', '(C)', '(D)', '(E)']
+          : null
+      }));
+      
+      // 按照題型排序:單選題 -> 多選題 -> 選填題
+      const typeOrder = { 'single': 1, 'multiple': 2, 'fill': 3 };
+      questions.value.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
+
+      console.log('排序後題目順序:', questions.value.map(q => q.type));
     }
-
-    const data = await response.json();
-    console.log('從 API 取得題目數量:', data.length);
-
-    // 篩選題型（如果有指定）
-    let filteredQuestions = data;
-    if (types) {
-      const typeList = types.split(',');
-      filteredQuestions = data.filter(q => typeList.includes(q.type));
-      console.log('題型篩選後題目數量:', filteredQuestions.length);
-    }
-
-    const requestedCount = parseInt(count) || 10;
-    
-    // 簡化檢查（理論上已在建立頁面檢查過）
-    if (filteredQuestions.length === 0) {
-      alert('找不到符合條件的題目');
-      loading.value = false;
-      router.push('/quiz/create');
-      return;
-    }
-
-    // 隨機打亂陣列並取指定數量
-    filteredQuestions = filteredQuestions.sort(() => Math.random() - 0.5);
-    filteredQuestions = filteredQuestions.slice(0, requestedCount);
-
-    console.log('最終題目數量:', filteredQuestions.length);
-
-    // 將題目轉換為測驗格式
-    questions.value = filteredQuestions.map(q => ({
-      id: q.id,
-      content: q.content,
-      type: q.type,
-      answer: q.answer,
-      difficulty: q.difficulty,
-      image_url: q.image_url,
-      // 根據題型生成固定數量的選項
-      // 單選題：4 個選項 (A-D)
-      // 多選題：5 個選項 (A-E)
-      // 選填題：無選項
-      options: q.type === 'single' 
-        ? ['(A)', '(B)', '(C)', '(D)'] 
-        : q.type === 'multiple'
-        ? ['(A)', '(B)', '(C)', '(D)', '(E)']
-        : null
-    }));
-    
-    // 按照題型排序：單選題 -> 多選題 -> 選填題
-    const typeOrder = { 'single': 1, 'multiple': 2, 'fill': 3 };
-    questions.value.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
-
-    console.log('排序後題目順序:', questions.value.map(q => q.type));
     
     // 初始化答案陣列
     answers.value = questions.value.map(q => {

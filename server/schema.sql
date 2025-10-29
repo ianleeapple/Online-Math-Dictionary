@@ -87,3 +87,34 @@ CREATE TABLE IF NOT EXISTS generation_tasks (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (source_question_id) REFERENCES question(id) ON DELETE CASCADE
 );
+
+-- 測驗記錄表
+CREATE TABLE IF NOT EXISTS quiz_records (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  submit_time DATETIME NOT NULL COMMENT '交卷時間',
+  topic VARCHAR(100) NOT NULL,
+  concept VARCHAR(100) NOT NULL,
+  timing_mode ENUM('forward', 'countdown') NOT NULL,
+  answer_time INT NOT NULL COMMENT '作答時間（秒）',
+  time_limit INT NULL COMMENT '倒數計時的時間限制（分鐘）',
+  difficulty VARCHAR(50) NOT NULL,
+  question_count INT NOT NULL,
+  question_types VARCHAR(255) NOT NULL COMMENT '題型，逗號分隔',
+  score INT NULL COMMENT '測驗成績',
+  corrected BOOLEAN DEFAULT FALSE COMMENT '是否訂正',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 測驗記錄明細表(記錄每題的答案)
+CREATE TABLE IF NOT EXISTS quiz_record_details (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  quiz_record_id INT NOT NULL,
+  question_order INT NOT NULL COMMENT '題目順序',
+  question_id INT NOT NULL,
+  user_answer TEXT NULL COMMENT '使用者的答案',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (quiz_record_id) REFERENCES quiz_records(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
+);

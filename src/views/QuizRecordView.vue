@@ -1,116 +1,287 @@
 <template>
-    <body>
+  <body>
     <div>
-        <h2>測驗紀錄</h2>
+      <h2>測驗紀錄</h2>
 
-    <div
-      class="record-container"
-      v-for="(record, index) in records"
-      :key="index"
-      @click="toggle(index)"
-    >
-      <div class="record-title">
-        {{ record.date }} 測驗主題：{{ record.topic }}
+      <!-- 載入中提示 -->
+      <div v-if="loading" style="text-align: center; padding: 40px;">
+        <p>載入中...</p>
       </div>
 
-      <div v-if="record.expanded" class="record-details" @click.stop>
-        <table>
-          <tbody>
-            <tr>
-              <td class="label">作答時間</td>
-              <td>{{ record.duration }}</td>
-            </tr>
-            <tr>
-              <td class="label">主題</td>
-              <td>{{ record.subject }}</td>
-            </tr>
-            <tr>
-              <td class="label">觀念</td>
-              <td>{{ record.concept }}</td>
-            </tr>
-            <tr>
-              <td class="label">難易度</td>
-              <td>{{ record.difficulty }}</td>
-            </tr>
-            <tr>
-              <td class="label">題數</td>
-              <td>{{ record.questionCount }} 題</td>
-            </tr>
-            <tr>
-              <td class="label">計時方式</td>
-              <td>{{ record.timerMode }}</td>
-            </tr>
-            <tr>
-              <td class="label">題型</td>
-              <td>{{ record.type }}</td>
-            </tr>
-            <tr>
-              <td class="label">測驗成績</td>
-              <td>{{ record.score }} 分</td>
-            </tr>
-            <tr>
-              <td class="label">是否訂正</td>
-              <td :style="{ color: record.corrected ? 'green' : 'red' }">
-                {{ record.corrected ? '已訂正' : '未訂正' }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 沒有記錄 -->
+      <div v-else-if="records.length === 0" style="text-align: center; padding: 40px;">
+        <p>目前沒有測驗記錄</p>
+      </div>
 
-        <div class="record-buttons">
-          <button class="btn" @click="viewExplanation(record)">查看詳解</button>
-          <button class="btn" @click="correctPaper(record)">訂正考卷</button>
-          <button class="btn" @click="retake(record)">再作一次</button>
-          <button class="btn" @click="similarTest(record)">類題考卷</button>
+      <!-- 測驗記錄列表 -->
+      <div v-else class="record-container" v-for="(record, index) in records" :key="record.id" @click="toggle(index)">
+        <div class="record-title">
+          {{ formatDateOnly(record.submit_time) }} {{ record.topic }}
+          <span v-if="record.score !== null" class="score-badge" :class="getScoreBadgeClass(record.score)">
+            {{ record.score }} 分
+          </span>
+        </div>
+
+        <div v-if="record.expanded" class="record-details" @click.stop>
+          <table>
+            <tbody>
+              <tr>
+                <td class="label">交卷時間</td>
+                <td>{{ formatDateOnly(record.submit_time) }}</td>
+              </tr>
+              <tr>
+                <td class="label">主題</td>
+                <td>{{ record.topic }}</td>
+              </tr>
+              <tr>
+                <td class="label">觀念</td>
+                <td>{{ record.concept }}</td>
+              </tr>
+              <tr>
+                <td class="label">計時方式</td>
+                <td>{{ getTimingModeLabel(record.timing_mode) }}</td>
+              </tr>
+              <tr>
+                <td class="label">作答時間</td>
+                <td>{{ formatDuration(record.answer_time) }}</td>
+              </tr>
+              <tr>
+                <td class="label">難易度</td>
+                <td>{{ record.difficulty }}</td>
+              </tr>
+              <tr>
+                <td class="label">題數</td>
+                <td>{{ record.question_count }} 題</td>
+              </tr>
+              <tr>
+                <td class="label">題型</td>
+                <td>{{ formatQuestionTypes(record.question_types) }}</td>
+              </tr>
+              <tr>
+                <td class="label">測驗成績</td>
+                <td>
+                  <span v-if="record.score !== null" :class="getScoreTextClass(record.score)">
+                    {{ record.score }} 分
+                  </span>
+                  <span v-else style="color: #999;">尚未批改</span>
+                </td>
+              </tr>
+              <tr>
+                <td class="label">是否訂正</td>
+                <td :style="{ color: record.corrected ? 'green' : 'red' }">
+                  {{ record.corrected ? '已訂正' : '未訂正' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="record-buttons">
+            <button class="btn" @click="viewDetail(record)">查看詳解</button>
+            <button class="btn" @click="correctPaper(record)">訂正考卷</button>
+            <button class="btn" @click="similarTest(record)">類題考卷</button>
+            <button class="btn" @click="retake(record)">再作一次</button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
   </body>
 </template>
 
 <script setup>
-import { reactive, onMounted } from 'vue';
-const records = reactive([]);
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
+const records = ref([]);
+const loading = ref(true);
+
 onMounted(async () => {
-  try {
-    const res = await fetch('/api/quizzes');
-    const quizzes = await res.json();
-    quizzes.forEach(q => {
-      records.push({
-        date: q.created_at ? q.created_at.split('T')[0] : '',
-        topic: q.title || '',
-        duration: q.duration || '',
-        subject: q.subject || '',
-        concept: q.concept || '',
-        difficulty: q.difficulty || '',
-        questionCount: q.count || '',
-        timerMode: q.timerMode || '',
-        type: q.type || '',
-        score: q.score || '',
-        corrected: q.corrected || false,
-        expanded: false
-      });
-    });
-  } catch (e) {
-    console.error('API 請求失敗', e);
-  }
+  await loadRecords();
 });
 
+// 載入測驗記錄
+async function loadRecords() {
+  loading.value = true;
+  
+  try {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+    
+    if (!currentUser.id) {
+      alert('請先登入');
+      router.push('/login');
+      return;
+    }
+
+    const response = await fetch(`/api/quiz-records/user/${currentUser.id}`);
+    
+    if (!response.ok) {
+      throw new Error('載入測驗記錄失敗');
+    }
+
+    const data = await response.json();
+    
+    // 為每筆記錄新增 expanded 屬性
+    records.value = data.map(record => ({
+      ...record,
+      expanded: false
+    }));
+
+  } catch (error) {
+    console.error('載入測驗記錄失敗:', error);
+    alert('載入測驗記錄失敗: ' + error.message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 展開及收合記錄
 function toggle(index) {
-  records[index].expanded = !records[index].expanded;
+  records.value[index].expanded = !records.value[index].expanded;
 }
-function viewExplanation(record) {
-  console.log("查看詳解", record.topic);
+
+// 查看詳解
+async function viewDetail(record) {
+  try {
+    const response = await fetch(`/api/quiz-records/${record.id}`);
+    
+    if (!response.ok) {
+      throw new Error('載入測驗詳情失敗');
+    }
+
+    const detail = await response.json();
+    
+    console.log('測驗詳情:', detail);
+    alert("還沒做!");
+    
+    // TODO: 可以跳轉到詳解頁面或顯示模態框
+    
+  } catch (error) {
+    console.error('載入測驗詳情失敗:', error);
+    alert('載入測驗詳情失敗: ' + error.message);
+  }
 }
+
+// 訂正考卷
 function correctPaper(record) {
-  console.log("訂正考卷", record.topic);
+  console.log('訂正考卷:', record);
+  alert('訂正考卷功能開發中');
+  // TODO: 實作訂正考卷功能
 }
-function retake(record) {
-  console.log("再作一次", record.topic);
-}
+
+// 類題考卷
 function similarTest(record) {
-  console.log("類題考卷", record.topic);
+  console.log('類題考卷:', record);
+  alert('類題考卷功能開發中');
+  // TODO: 實作類題考卷功能
+}
+
+// 再作一次功能
+async function retake(record) {
+  try {
+    // 取得該測驗記錄的詳細資料(包含所有題目)
+    const response = await fetch(`/api/quiz-records/${record.id}`);
+    
+    if (!response.ok) {
+      throw new Error('載入測驗詳情失敗');
+    }
+
+    const detail = await response.json();
+    
+    console.log('重考測驗詳情:', detail);
+    
+    // 提取題目 ID 列表(保持順序)
+    const questionIds = detail.questions.map(q => q.question_id).join(',');
+    
+    // 使用原始的時間限制
+    let timeLimit = record.time_limit; // 直接使用資料庫中儲存的時間限制(分鐘)
+    
+    console.log('重考參數:', {
+      timing_mode: record.timing_mode,
+      question_count: record.question_count,
+      timeLimit: timeLimit,
+      note: timeLimit ? `使用原始時間限制: ${timeLimit} 分鐘` : '正向計時無時間限制'
+    });
+    
+    // 導向測驗頁面,使用 retake 模式
+    router.push({
+      name: 'QuizTaking',
+      query: {
+        retake: 'true',
+        recordId: record.id,
+        questionIds: questionIds,
+        topic: record.topic,
+        concept: record.concept,
+        difficulty: record.difficulty,
+        count: record.question_count,
+        timing: record.timing_mode,
+        timeLimit: timeLimit || undefined, // 使用原始時間限制
+        types: record.question_types
+      }
+    });
+    
+  } catch (error) {
+    console.error('重考測驗失敗:', error);
+    alert('無法重新作答: ' + error.message);
+  }
+}
+
+// 格式化日期（只顯示日期，不顯示時間）
+function formatDateOnly(datetime) {
+  const date = new Date(datetime);
+  return date.toLocaleDateString('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+}
+
+// 格式化作答時間
+function formatDuration(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes} 分 ${secs} 秒`;
+}
+
+// 取得計時方式標籤
+function getTimingModeLabel(mode) {
+  const labels = {
+    'forward': '正向計時',
+    'countdown': '倒數計時'
+  };
+  return labels[mode] || mode;
+}
+
+// 格式化題型
+function formatQuestionTypes(types) {
+  const typeLabels = {
+    'single': '單選題',
+    'multiple': '多選題',
+    'fill': '選填題'
+  };
+  
+  return types.split(',').map(t => typeLabels[t] || t).join('、');
+}
+
+// 取得成績徽章的 CSS class
+function getScoreBadgeClass(score) {
+  if (score === 0) {
+    return 'score-fail';      // 0 分時顯示紅色
+  } else if (score < 60) {
+    return 'score-warning';   // <60 分時顯示橘色
+  } else {
+    return 'score-pass';      // >=60 分時顯示綠色
+  }
+}
+
+// 取得成績文字的 CSS class
+function getScoreTextClass(score) {
+  if (score === 0) {
+    return 'text-fail';
+  } else if (score < 60) {
+    return 'text-warning';
+  } else {
+    return 'text-pass';
+  }
 }
 </script>
 
@@ -138,6 +309,45 @@ h2 {
   font-size: 20px;
   font-weight: bold;
   color: #2d2d2d;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.score-badge {
+  text-align: center;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: bold;
+  min-width: 50px;
+}
+
+/* 右上角成績背景顏色 */
+.score-pass {
+  background-color: #27ae60; /* >=60 分時顯示綠色 */
+}
+
+.score-warning {
+  background-color: #f39c12; /* <60 分時顯示橘色 */
+}
+
+.score-fail {
+  background-color: #e74c3c; /* 0 分時顯示紅色 */
+}
+
+/* 成績文字顏色 */
+.text-pass {
+  color: #27ae60;
+}
+
+.text-warning {
+  color: #f39c12;
+}
+
+.text-fail {
+  color: #e74c3c;
 }
 
 .record-details {
