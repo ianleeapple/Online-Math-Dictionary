@@ -214,10 +214,15 @@ async function createQuiz() {
     const params = new URLSearchParams();
     if (selectedLevel.value) params.append('level', selectedLevel.value);
     if (selectedTopic.value) params.append('topic', selectedTopic.value);
+    
+    // 只有當選擇的不是「所有觀念」時才加入 concept 參數
     if (selectedConcept.value && selectedConcept.value !== '所有觀念') {
       params.append('concept', selectedConcept.value);
     }
-    if (selectedDifficulty.value) params.append('difficulty', selectedDifficulty.value);
+    
+    if (selectedDifficulty.value && selectedDifficulty.value !== '系統自動') {
+      params.append('difficulty', selectedDifficulty.value);
+    }
 
     console.log('檢查題目數量，API 查詢參數:', params.toString());
 
@@ -299,11 +304,11 @@ async function createQuiz() {
       query: {
         level: selectedLevel.value,
         topic: selectedTopic.value,
-        concept: selectedConcept.value,
+        concept: selectedConcept.value, // 保留原始值,包括「所有觀念」
         difficulty: selectedDifficulty.value,
         count: count,
         timing: timingMode,
-        timeLimit: timeLimit || undefined, // 沒有時間限制就不傳
+        timeLimit: timeLimit || undefined,
         types: selectedQuestionTypes.value.join(',')
       }
     });
