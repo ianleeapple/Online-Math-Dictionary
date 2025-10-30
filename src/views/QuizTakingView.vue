@@ -385,7 +385,7 @@ async function loadQuizData() {
       timingMode: timing || 'forward'
     };
 
-    // ========== 再做一次功能使用指定的題目列表 ==========
+    // ========== 再做一次功能:載入指定題目 ==========
     if (retake === 'true' && questionIds) {
       console.log('📝 再做一次功能:載入指定題目');
 
@@ -451,8 +451,16 @@ async function loadQuizData() {
       const params = new URLSearchParams();
       if (level) params.append('level', level);
       if (topic) params.append('topic', topic);
-      if (concept && concept !== '所有觀念') params.append('concept', concept);
-      if (difficulty) params.append('difficulty', difficulty);
+      
+      // 關鍵修改:只有當 concept 不是「所有觀念」時,才加入篩選
+      if (concept && concept !== '所有觀念') {
+        params.append('concept', concept);
+      }
+      
+      // 難度也要處理「系統自動」的情況
+      if (difficulty && difficulty !== '系統自動') {
+        params.append('difficulty', difficulty);
+      }
 
       console.log('API 查詢參數:', params.toString());
 

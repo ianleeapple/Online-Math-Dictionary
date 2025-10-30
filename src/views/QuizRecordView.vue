@@ -39,7 +39,7 @@
               </tr>
               <tr>
                 <td class="label">計時方式</td>
-                <td>{{ getTimingModeLabel(record.timing_mode) }}</td>
+                <td>{{ getTimingModeLabel(record) }}</td>
               </tr>
               <tr>
                 <td class="label">作答時間</td>
@@ -79,7 +79,8 @@
             <button class="btn" @click="viewDetail(record)">查看詳解</button>
             <button class="btn" @click="correctPaper(record)">訂正考卷</button>
             <button class="btn" @click="similarTest(record)">類題考卷</button>
-            <button class="btn" @click="retake(record)">再作一次</button>
+            <button class="btn" @click="retake(record)">再做一次</button>
+            <button class="btn" @click="goToQuizCreate">其他測驗</button>
           </div>
         </div>
       </div>
@@ -225,6 +226,11 @@ async function retake(record) {
   }
 }
 
+// 其他測驗按鈕功能(跳轉到測驗建立頁面)
+function goToQuizCreate() {
+  router.push({ name: 'QuizCreate' });
+}
+
 // 格式化日期（只顯示日期，不顯示時間）
 function formatDateOnly(datetime) {
   const date = new Date(datetime);
@@ -243,12 +249,27 @@ function formatDuration(seconds) {
 }
 
 // 取得計時方式標籤
-function getTimingModeLabel(mode) {
-  const labels = {
-    'forward': '正向計時',
-    'countdown': '倒數計時'
-  };
-  return labels[mode] || mode;
+function getTimingModeLabel(record) {
+  if (record.timing_mode === 'forward') {
+    return '正向計時';
+  } else if (record.timing_mode === 'countdown') {
+    // 倒數計時模式:判斷是系統建議還是自訂
+    if (record.time_limit) {
+      // 系統建議倒數計時:每題5分鐘
+      const systemSuggestedTime = record.question_count * 5;
+      
+      if (record.time_limit === systemSuggestedTime) {
+        return '倒數計時 (系統建議)';
+      } else {
+        return `倒數計時 (自訂:${record.time_limit}分鐘)`;
+      }
+    } else {
+      // 沒有時間限制資料(舊資料)
+      return '倒數計時';
+    }
+  }
+  
+  return record.timing_mode || '未知';
 }
 
 // 格式化題型
