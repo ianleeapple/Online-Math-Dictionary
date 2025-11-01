@@ -4,7 +4,11 @@
     <div class="card">
       <div class="form-group">
         <label>原始題目</label>
-        <textarea v-model="sourceQuestion" rows="4" placeholder="請輸入原始題目"></textarea>
+        <FormulaEditor 
+          v-model="sourceQuestion" 
+          :rows="5"
+          placeholder="請輸入原始題目，可使用上方工具列插入數學符號"
+        />
       </div>
       <div class="form-group">
         <label>題目類型</label>
@@ -37,7 +41,12 @@
       </div>
       <div class="form-group" v-if="questionType === '單選題' || questionType === '多選題'">
         <label>選項範例</label>
-        <textarea v-model="optionsTemplate" rows="3" placeholder="請輸入選項範例，每行一個"></textarea>
+        <FormulaEditor 
+          v-model="optionsTemplate" 
+          :rows="4"
+          placeholder="請輸入選項範例，每行一個"
+          :show-hints="false"
+        />
       </div>
       <div class="form-group">
         <label>額外限制條件</label>
@@ -228,6 +237,7 @@
 <script setup>
 import { ref, reactive, nextTick, watch } from 'vue';
 import MathContent from '../components/MathContent.vue';
+import FormulaEditor from '../components/FormulaEditor.vue';
 
 const sourceQuestion = ref('');
 const questionType = ref('填充題');
