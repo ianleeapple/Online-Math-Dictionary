@@ -69,7 +69,7 @@
               <tr>
                 <td class="label">是否訂正</td>
                 <td :style="{ color: record.corrected ? 'green' : 'red' }">
-                  {{ record.corrected ? '已訂正' : '未訂正' }}
+                  {{ record.corrected ? '已完成訂正' : '未完成訂正' }}
                 </td>
               </tr>
             </tbody>
@@ -163,10 +163,32 @@ async function viewDetail(record) {
 }
 
 // 訂正考卷
-function correctPaper(record) {
-  console.log('訂正考卷:', record);
-  alert('訂正考卷功能開發中');
-  // TODO: 實作訂正考卷功能
+async function correctPaper(record) {
+  try {
+    // 檢查是否有需要訂正的題目
+    const response = await fetch(`/api/quiz-records/${record.id}/corrections`);
+    
+    if (!response.ok) {
+      throw new Error('檢查訂正狀態失敗');
+    }
+
+    const data = await response.json();
+    
+    if (data.totalWrong === 0) {
+      alert('本次測驗已無需要訂正的題目');
+      return;
+    }
+
+    // 導向訂正頁面
+    router.push({
+      name: 'CorrectPaper',
+      params: { id: record.id }
+    });
+
+  } catch (error) {
+    console.error('訂正考卷失敗:', error);
+    alert('訂正考卷失敗: ' + error.message);
+  }
 }
 
 // 類題考卷

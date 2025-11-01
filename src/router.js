@@ -4,6 +4,7 @@ import ProfileView from './views/ProfileView.vue';
 import QuizCreateView from './views/QuizCreateView.vue';
 import QuizTakingView from './views/QuizTakingView.vue';
 import QuizRecordView from './views/QuizRecordView.vue';
+import CorrectPaperView from './views/CorrectPaperView.vue';
 import ClassGroupView from './views/ClassGroupView.vue';
 import LoginView from './views/LoginView.vue';
 import RegisterView from './views/RegisterView.vue';
@@ -17,6 +18,7 @@ const routes = [
   { path: '/quiz/create', name: 'QuizCreate', component: QuizCreateView },
   { path: '/quiz/taking', name: 'QuizTaking', component: QuizTakingView },
   { path: '/quiz/records', name: 'QuizRecord', component: QuizRecordView },
+  { path: '/quiz/correct/:id', name: 'CorrectPaper', component: CorrectPaperView },
   { path: '/class-group', name: 'ClassGroup', component: ClassGroupView },
   { path: '/login', name: 'Login', component: LoginView },
   { path: '/register', name: 'Register', component: RegisterView },

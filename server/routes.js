@@ -1550,4 +1550,212 @@ router.get('/generation-tasks/user/:userId', async (req, res) => {
   }
 });
 
+// ==================== 訂正考卷相關 API ====================
+
+// 取得需要訂正的題目列表
+// GET /api/quiz-records/:id/corrections
+router.get('/quiz-records/:id/corrections', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // 取得測驗記錄
+    const [records] = await pool.query(
+      'SELECT * FROM quiz_records WHERE id = ?',
+      [id]
+    );
+
+    if (records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該測驗記錄'
+      });
+    }
+
+    // 取得測驗明細（題目、使用者答案、正確答案）
+    const [details] = await pool.query(
+      `SELECT qrd.*, q.content, q.type, q.answer as correct_answer, q.image_url, q.difficulty
+       FROM quiz_record_details qrd
+       JOIN question q ON qrd.question_id = q.id
+       WHERE qrd.quiz_record_id = ?
+       ORDER BY qrd.question_order`,
+      [id]
+    );
+
+    // 篩選出答錯的題目
+    const wrongQuestions = [];
+
+    for (const detail of details) {
+      const { question_id, user_answer, correct_answer, type } = detail;
+      let isCorrect = false;
+
+      if (type === 'single') {
+        isCorrect = user_answer && user_answer.trim() === correct_answer.trim();
+      } else if (type === 'multiple') {
+        if (user_answer && user_answer.trim() !== '') {
+          const userAnswers = user_answer.split(',').map(a => a.trim()).sort();
+          const correctAnswers = correct_answer.split(',').map(a => a.trim()).sort();
+          isCorrect = JSON.stringify(userAnswers) === JSON.stringify(correctAnswers);
+        }
+      } else if (type === 'fill') {
+        isCorrect = user_answer && user_answer.trim() === correct_answer.trim();
+      }
+
+      // 如果答錯，檢查是否已訂正
+      if (!isCorrect) {
+        const [correctionRecords] = await pool.query(
+          'SELECT corrected FROM correction_records WHERE quiz_record_id = ? AND question_id = ?',
+          [id, question_id]
+        );
+
+        const alreadyCorrected = correctionRecords.length > 0 && correctionRecords[0].corrected;
+
+        if (!alreadyCorrected) {
+          wrongQuestions.push({
+            ...detail,
+            options: type === 'single' 
+              ? ['(A)', '(B)', '(C)', '(D)'] 
+              : type === 'multiple'
+              ? ['(A)', '(B)', '(C)', '(D)', '(E)']
+              : null
+          });
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      quizRecordId: id,
+      wrongQuestions: wrongQuestions,
+      totalWrong: wrongQuestions.length
+    });
+
+  } catch (error) {
+    console.error('取得訂正題目失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '取得訂正題目失敗',
+      error: error.message
+    });
+  }
+});
+
+// 提交單題訂正
+// POST /api/quiz-records/:id/corrections/:questionId
+router.post('/quiz-records/:id/corrections/:questionId', async (req, res) => {
+  const { id, questionId } = req.params;
+  const { userAnswer } = req.body;
+
+  try {
+    // 取得題目資訊
+    const [questions] = await pool.query(
+      'SELECT * FROM question WHERE id = ?',
+      [questionId]
+    );
+
+    if (questions.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該題目'
+      });
+    }
+
+    const question = questions[0];
+    const { answer: correctAnswer, type } = question;
+
+    // 判斷答案是否正確
+    let isCorrect = false;
+
+    if (type === 'single') {
+      isCorrect = userAnswer && userAnswer.trim() === correctAnswer.trim();
+    } else if (type === 'multiple') {
+      if (userAnswer && userAnswer.trim() !== '') {
+        const userAnswers = userAnswer.split(',').map(a => a.trim()).sort();
+        const correctAnswers = correctAnswer.split(',').map(a => a.trim()).sort();
+        isCorrect = JSON.stringify(userAnswers) === JSON.stringify(correctAnswers);
+      }
+    } else if (type === 'fill') {
+      isCorrect = userAnswer && userAnswer.trim() === correctAnswer.trim();
+    }
+
+    if (isCorrect) {
+      // 答對了，記錄訂正成功（修正：移除多餘的引號）
+      await pool.query(
+        `INSERT INTO correction_records (quiz_record_id, question_id, corrected, corrected_at)
+         VALUES (?, ?, TRUE, NOW())
+         ON DUPLICATE KEY UPDATE corrected = TRUE, corrected_at = NOW()`,
+        [id, questionId]
+      );
+
+      // 檢查是否所有錯題都已訂正完成
+      const [details] = await pool.query(
+        `SELECT qrd.*, q.type, q.answer as correct_answer
+         FROM quiz_record_details qrd
+         JOIN question q ON qrd.question_id = q.id
+         WHERE qrd.quiz_record_id = ?`,
+        [id]
+      );
+
+      let allCorrected = true;
+
+      for (const detail of details) {
+        const { question_id, user_answer, correct_answer, type } = detail;
+        let wasCorrect = false;
+
+        if (type === 'single') {
+          wasCorrect = user_answer && user_answer.trim() === correct_answer.trim();
+        } else if (type === 'multiple') {
+          if (user_answer && user_answer.trim() !== '') {
+            const userAnswers = user_answer.split(',').map(a => a.trim()).sort();
+            const correctAnswers = correct_answer.split(',').map(a => a.trim()).sort();
+            wasCorrect = JSON.stringify(userAnswers) === JSON.stringify(correctAnswers);
+          }
+        } else if (type === 'fill') {
+          wasCorrect = user_answer && user_answer.trim() === correct_answer.trim();
+        }
+
+        if (!wasCorrect) {
+          const [correctionRecords] = await pool.query(
+            'SELECT corrected FROM correction_records WHERE quiz_record_id = ? AND question_id = ?',
+            [id, question_id]
+          );
+
+          if (correctionRecords.length === 0 || !correctionRecords[0].corrected) {
+            allCorrected = false;
+            break;
+          }
+        }
+      }
+
+      // 如果所有錯題都已訂正，更新測驗記錄
+      if (allCorrected) {
+        await pool.query(
+          'UPDATE quiz_records SET corrected = TRUE WHERE id = ?',
+          [id]
+        );
+      }
+
+      res.json({
+        success: true,
+        correct: true,
+        allCorrected: allCorrected,
+        message: '作答正確，此題已訂正完成！'
+      });
+    } else {
+      res.json({
+        success: true,
+        correct: false,
+        message: '作答不正確，請重新訂正！'
+      });
+    }
+
+  } catch (error) {
+    console.error('訂正題目失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '訂正題目失敗',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
