@@ -784,7 +784,7 @@ router.get('/quiz-records/:id', async (req, res) => {
 
     // 取得測驗明細(題目和答案)
     const [details] = await pool.query(
-      `SELECT qrd.*, q.content, q.type, q.answer as correct_answer, q.difficulty as question_difficulty
+      `SELECT qrd.*, q.content, q.type, q.answer as correct_answer, q.image_url, q.difficulty as question_difficulty
        FROM quiz_record_details qrd
        JOIN question q ON qrd.question_id = q.id
        WHERE qrd.quiz_record_id = ?
