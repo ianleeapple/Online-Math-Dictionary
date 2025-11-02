@@ -5,6 +5,7 @@ import QuizCreateView from './views/QuizCreateView.vue';
 import QuizTakingView from './views/QuizTakingView.vue';
 import QuizRecordView from './views/QuizRecordView.vue';
 import CorrectPaperView from './views/CorrectPaperView.vue';
+import QuizSolutionView from './views/QuizSolutionView.vue';
 import ClassGroupView from './views/ClassGroupView.vue';
 import LoginView from './views/LoginView.vue';
 import RegisterView from './views/RegisterView.vue';
@@ -19,6 +20,7 @@ const routes = [
   { path: '/quiz/taking', name: 'QuizTaking', component: QuizTakingView },
   { path: '/quiz/records', name: 'QuizRecord', component: QuizRecordView },
   { path: '/quiz/correct/:id', name: 'CorrectPaper', component: CorrectPaperView },
+  { path: '/quiz/solution/:id', name: 'QuizSolution', component: QuizSolutionView },
   { path: '/class-group', name: 'ClassGroup', component: ClassGroupView },
   { path: '/login', name: 'Login', component: LoginView },
   { path: '/register', name: 'Register', component: RegisterView },

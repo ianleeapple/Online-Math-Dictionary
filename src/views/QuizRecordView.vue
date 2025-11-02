@@ -143,18 +143,11 @@ function toggle(index) {
 // 查看詳解
 async function viewDetail(record) {
   try {
-    const response = await fetch(`/api/quiz-records/${record.id}`);
-    
-    if (!response.ok) {
-      throw new Error('載入測驗詳情失敗');
-    }
-
-    const detail = await response.json();
-    
-    console.log('測驗詳情:', detail);
-    alert("還沒做!");
-    
-    // TODO: 可以跳轉到詳解頁面或顯示模態框
+    // 直接導向詳解頁面
+    router.push({
+      name: 'QuizSolution',
+      params: { id: record.id }
+    });
     
   } catch (error) {
     console.error('載入測驗詳情失敗:', error);
