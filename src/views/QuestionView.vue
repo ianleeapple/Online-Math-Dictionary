@@ -213,7 +213,7 @@
       </div>
       <div v-for="task in activeTasks" :key="task.taskId" class="task-card">
         <div class="task-header">
-          <span class="task-id">任務 #{{ task.taskId }}</span>
+          <span class="task-id">任務 #{{ task.displayNumber ?? task.taskId }}</span>
           <span class="task-status" :class="'status-' + task.status">{{ getStatusText(task.status) }}</span>
           <button 
             v-if="task.status === 'completed' || task.status === 'failed'" 
@@ -618,6 +618,19 @@ const isGenerating = ref(false);
 const activeTasks = ref([]);
 const dismissedTaskIds = ref([]); // 記錄使用者已關閉的任務 ID
 let taskPollingInterval = null;
+let pollingInitializationInProgress = false;
+
+const RUNNING_STATUSES = ['pending', 'processing'];
+
+function hasRunningTasks(tasks = activeTasks.value) {
+  return tasks.some(task => RUNNING_STATUSES.includes(task.status));
+}
+
+function maybeStopPolling() {
+  if (!hasRunningTasks()) {
+    stopTaskPolling();
+  }
+}
 
 // 取得當前使用者
 function getCurrentUser() {
@@ -665,11 +678,16 @@ async function submitGenerateTask() {
     }
 
     const data = await response.json();
-    
-    alert(`✅ 已建立生成任務 #${data.taskId}\n將生成 ${generateCount.value} 道類似題目\n\n任務將在背景處理，您可以繼續其他操作。`);
-    
-    // 加入監控列表
-    loadUserTasks();
+
+    const { hasRunning } = await loadUserTasks();
+    if (hasRunning) {
+      await startTaskPolling();
+    }
+
+    const newTask = activeTasks.value.find(task => task.taskId === data.taskId);
+    const displayNumber = newTask?.displayNumber ?? newTask?.taskId ?? data.taskId;
+
+    alert(`✅ 已建立生成任務 #${displayNumber}\n將生成 ${generateCount.value} 道類似題目\n\n任務將在背景處理，您可以繼續其他操作。`);
     
     closeGenerateDialog();
 
@@ -684,39 +702,61 @@ async function submitGenerateTask() {
 // 載入使用者的任務列表
 async function loadUserTasks() {
   const currentUser = getCurrentUser();
-  if (!currentUser) return;
+  if (!currentUser) {
+    activeTasks.value = [];
+    return { hasRunning: false, count: 0 };
+  }
 
   try {
     const response = await fetch(`/api/generation-tasks/user/${currentUser.id}`);
     if (!response.ok) throw new Error('載入任務失敗');
-    
+
     const tasks = await response.json();
-    
-    // 只保留進行中的任務 + 當前畫面上已顯示的已完成任務
+
+    const previousDisplayNumbers = new Map(
+      activeTasks.value
+        .filter(task => task.displayNumber != null)
+        .map(task => [task.taskId, task.displayNumber])
+    );
+
     const currentTaskIds = activeTasks.value.map(t => t.taskId);
-    
-    activeTasks.value = tasks.filter(task => {
-      // 如果使用者已關閉此任務，不顯示
-      if (dismissedTaskIds.value.includes(task.taskId)) {
+
+    const filtered = tasks
+      .filter(task => {
+        if (dismissedTaskIds.value.includes(task.taskId)) {
+          return false;
+        }
+
+        if (RUNNING_STATUSES.includes(task.status)) {
+          return true;
+        }
+
+        if (task.status === 'completed' || task.status === 'failed') {
+          return currentTaskIds.includes(task.taskId);
+        }
+
         return false;
-      }
-      
-      // 保留進行中的任務
-      if (task.status === 'pending' || task.status === 'processing') {
-        return true;
-      }
-      
-      // 如果是已完成/失敗的任務，只保留當前已在畫面上的
-      if (task.status === 'completed' || task.status === 'failed') {
-        return currentTaskIds.includes(task.taskId);
-      }
-      
-      return false;
+      })
+      .map(task => ({
+        ...task,
+        displayNumber: previousDisplayNumbers.get(task.taskId) ?? null
+      }));
+
+    const running = filtered
+      .filter(task => RUNNING_STATUSES.includes(task.status))
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+    running.forEach((task, index) => {
+      task.displayNumber = index + 1;
     });
+
+    activeTasks.value = filtered;
 
   } catch (error) {
     console.error('載入任務失敗:', error);
   }
+
+  return { hasRunning: hasRunningTasks(), count: activeTasks.value.length };
 }
 
 // 判斷任務是否為最近 5 分鐘內（已廢棄，保留以防需要）
@@ -737,38 +777,45 @@ function getStatusText(status) {
   return map[status] || status;
 }
 
-// 開始輪詢任務狀態
-function startTaskPolling() {
-  if (taskPollingInterval) return;
-  
-  // 初始載入
-  loadUserTasks();
-  
-  // 每 3 秒輪詢一次
-  taskPollingInterval = setInterval(async () => {
-    // 記錄輪詢前的任務狀態
-    const previousTasks = [...activeTasks.value];
-    
-    // 重新載入任務
-    await loadUserTasks();
-    
-    // 檢查是否有任務剛完成（狀態從 pending/processing 變成 completed/failed）
-    const newlyCompleted = activeTasks.value.filter(t => 
-      (t.status === 'completed' || t.status === 'failed') &&
-      !previousTasks.some(prev => prev.taskId === t.taskId && (prev.status === 'completed' || prev.status === 'failed'))
-    );
-    
-    // 如果有任務剛完成，且有題目列表，自動刷新題目
-    if (newlyCompleted.length > 0) {
-      console.log(`[任務] 檢測到 ${newlyCompleted.length} 個任務完成`);
-      
-      // 如果有題目列表，刷新顯示新生成的題目
-      if (questions.value.length > 0) {
-        console.log('[任務] 刷新題目列表');
-        fetchQuestions();
-      }
+const pollTasks = async () => {
+  const previousTasks = [...activeTasks.value];
+  const { hasRunning } = await loadUserTasks();
+
+  const newlyCompleted = activeTasks.value.filter(t =>
+    (t.status === 'completed' || t.status === 'failed') &&
+    !previousTasks.some(prev => prev.taskId === t.taskId && (prev.status === 'completed' || prev.status === 'failed'))
+  );
+
+  if (newlyCompleted.length > 0) {
+    console.log(`[任務] 檢測到 ${newlyCompleted.length} 個任務完成`);
+    if (questions.value.length > 0) {
+      console.log('[任務] 刷新題目列表');
+      fetchQuestions();
     }
-  }, 3000);
+  }
+
+  if (!hasRunning) {
+    stopTaskPolling();
+  }
+
+  return { hasRunning };
+};
+
+// 開始輪詢任務狀態
+async function startTaskPolling() {
+  if (taskPollingInterval || pollingInitializationInProgress) return;
+
+  pollingInitializationInProgress = true;
+  try {
+    const { hasRunning } = await pollTasks();
+    if (!hasRunning) {
+      return;
+    }
+
+    taskPollingInterval = setInterval(pollTasks, 3000);
+  } finally {
+    pollingInitializationInProgress = false;
+  }
 }
 
 // 停止輪詢
@@ -777,6 +824,7 @@ function stopTaskPolling() {
     clearInterval(taskPollingInterval);
     taskPollingInterval = null;
   }
+  pollingInitializationInProgress = false;
 }
 
 // 移除單一任務
@@ -788,6 +836,8 @@ function removeTask(taskId) {
   
   // 從顯示列表中移除
   activeTasks.value = activeTasks.value.filter(t => t.taskId !== taskId);
+
+  maybeStopPolling();
 }
 
 // 清除所有已完成的任務
@@ -804,6 +854,8 @@ function clearCompletedTasks() {
   activeTasks.value = activeTasks.value.filter(t => 
     t.status === 'pending' || t.status === 'processing'
   );
+
+  maybeStopPolling();
 }
 
 // 產生類題功能（舊版，保留但不使用）
@@ -813,7 +865,9 @@ function generateSimilarQuestion(question) {
 
 // 元件掛載時啟動輪詢
 onMounted(() => {
-  startTaskPolling();
+  if (getCurrentUser()) {
+    startTaskPolling();
+  }
 });
 
 // 元件卸載時停止輪詢
