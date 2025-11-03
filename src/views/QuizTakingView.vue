@@ -40,7 +40,7 @@
       <div v-else>
         <div class="question-title">
           <strong>第 {{ currentIndex + 1 }} 題 ({{ getQuestionTypeLabel(currentQuestion.type) }})</strong>
-          {{ currentQuestion.content }}
+          <MathContent :content="currentQuestion.content" />
         </div>
 
         <!-- 題目附圖區域 -->
@@ -103,7 +103,8 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router';
+import MathContent from '../components/MathContent.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -562,8 +563,6 @@ onUnmounted(() => {
 });
 
 // 中途離開測驗提醒(處理點擊其他頁面)
-import { onBeforeRouteLeave } from 'vue-router';
-
 onBeforeRouteLeave((to, from, next) => {
   if (!isExamCompleted.value) {
     const confirmed = confirm('是否要離開測驗？\n若確定要離開，則本次測驗將不會保留紀錄。');
