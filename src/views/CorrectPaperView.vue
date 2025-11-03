@@ -30,7 +30,7 @@
         </div>
 
         <div class="question-content">
-          {{ question.content }}
+          <MathContent :content="question.content" />
         </div>
 
         <!-- 題目附圖 -->
@@ -43,7 +43,12 @@
           <!-- 單選題 -->
           <div v-if="question.type === 'single'">
             <label v-for="(opt, idx) in question.options" :key="idx">
-              <input type="radio" :name="'q' + question.question_id" :value="idx" v-model="answers[question.question_id]" />
+              <input 
+                type="radio" 
+                :name="'q' + question.question_id" 
+                :value="idx" 
+                v-model="answers[question.question_id]"
+              > 
               {{ opt }}
             </label>
           </div>
@@ -51,14 +56,22 @@
           <!-- 多選題 -->
           <div v-else-if="question.type === 'multiple'">
             <label v-for="(opt, idx) in question.options" :key="idx">
-              <input type="checkbox" :value="idx" v-model="answers[question.question_id]" />
+              <input 
+                type="checkbox" 
+                :value="idx" 
+                v-model="answers[question.question_id]"
+              > 
               {{ opt }}
             </label>
           </div>
 
           <!-- 選填題 -->
           <div v-else-if="question.type === 'fill'">
-            <input class="input-answer" v-model="answers[question.question_id]" placeholder="請填入答案" />
+            <input 
+              class="input-answer" 
+              v-model="answers[question.question_id]" 
+              placeholder="請填入答案" 
+            />
           </div>
         </div>
 
@@ -75,6 +88,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import MathContent from '../components/MathContent.vue';
 
 const router = useRouter();
 const route = useRoute();

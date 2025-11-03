@@ -30,7 +30,7 @@
         </div>
 
         <div class="question-content">
-          {{ question.content }}
+          <MathContent :content="question.content" />
         </div>
 
         <!-- 題目附圖 -->
@@ -41,14 +41,16 @@
         <!-- 顯示正確答案 -->
         <div class="answer-section">
           <div class="answer-label">正確答案：</div>
-          <div class="answer-value">{{ formatCorrectAnswer(question.correct_answer, question.type) }}</div>
+          <div class="answer-value">
+            <MathContent :content="formatCorrectAnswer(question.correct_answer, question.type)" />
+          </div>
         </div>
 
         <!-- 顯示使用者答案 -->
         <div class="answer-section">
           <div class="answer-label">您的答案：</div>
           <div class="answer-value" :class="getAnswerClass(question)">
-            {{ formatUserAnswer(question.user_answer, question.type) }}
+            <MathContent :content="formatUserAnswer(question.user_answer, question.type)" />
           </div>
         </div>
 
@@ -72,6 +74,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import MathContent from '../components/MathContent.vue';
 
 const router = useRouter();
 const route = useRoute();
