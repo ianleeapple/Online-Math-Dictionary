@@ -9,8 +9,10 @@ export default {
   name: 'MathContent',
   props: {
     content: {
-      type: String,
-      required: true
+      default: '',
+      validator(value) {
+        return value == null || typeof value === 'string';
+      }
     }
   },
   computed: {

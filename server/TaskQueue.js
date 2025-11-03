@@ -11,7 +11,8 @@ class TaskQueue {
     this.dbConfig = dbConfig;
     this.isProcessing = false;
     this.pollInterval = 5000; // 每 5 秒檢查一次佇列
-    this.maxRetries = 2; // 單題最多重試 2 次
+  this.maxRetries = 3; // 單題最多重試 3 次
+  this.backoffBaseMs = 2000; // 重試的基礎延遲時間
     this.timeoutMs = 45000; // 單題生成超時 45 秒（比 routes.js 多一點時間）
     
     // 初始化 Gemini AI
@@ -22,7 +23,8 @@ class TaskQueue {
     this.genAI = new GoogleGenerativeAI(apiKey);
     
     // 使用 aiConfig 的設定
-    this.modelName = aiConfig.geminiModel || 'gemini-2.5-flash';
+  this.modelName = aiConfig.geminiModel || 'gemini-2.5-flash';
+  this.fallbackModelName = 'gemini-2.5-flash-lite';
     this.generationConfig = {
       temperature: aiConfig.temperature || 0.7,
     };
@@ -107,6 +109,8 @@ class TaskQueue {
       console.log(`[TaskQueue] 原始題目: ${sourceQuestion.content.substring(0, 50)}...`);
 
       // 逐一生成題目
+      let successfulCount = 0;
+
       for (let i = 0; i < task.total_count; i++) {
         try {
           console.log(`[TaskQueue] 生成第 ${i + 1}/${task.total_count} 題...`);
@@ -130,10 +134,12 @@ class TaskQueue {
             ]
           );
 
+          successfulCount += 1;
+
           // 更新已完成數量
           await connection.query(
             'UPDATE generation_tasks SET completed_count = ?, updated_at = NOW() WHERE id = ?',
-            [i + 1, task.id]
+            [successfulCount, task.id]
           );
 
           console.log(`[TaskQueue] 第 ${i + 1} 題已完成並存入資料庫`);
@@ -153,13 +159,21 @@ class TaskQueue {
         }
       }
 
-      // 更新任務狀態為 completed
+      const finalStatus = successfulCount === 0 ? 'failed' : 'completed';
+      const statusMessage = `[TaskQueue] 任務 #${task.id} 處理結束，成功 ${successfulCount}/${task.total_count} 題`;
+
       await connection.query(
         'UPDATE generation_tasks SET status = ?, updated_at = NOW() WHERE id = ?',
-        ['completed', task.id]
+        [finalStatus, task.id]
       );
 
-      console.log(`[TaskQueue] 任務 #${task.id} 已完成，共生成 ${task.completed_count} 題`);
+      if (successfulCount === 0) {
+        console.warn(`${statusMessage}（全部失敗）`);
+      } else if (successfulCount < task.total_count) {
+        console.warn(`${statusMessage}（部分失敗，詳見錯誤訊息）`);
+      } else {
+        console.log(`${statusMessage}`);
+      }
 
     } catch (error) {
       console.error(`[TaskQueue] 任務 #${task.id} 處理失敗:`, error);
@@ -195,8 +209,15 @@ class TaskQueue {
       console.log(`[TaskQueue] Prompt 長度: ${fullPrompt.length} 字元`);
 
       // 設定 timeout 並呼叫 API
+      const usingFallbackModel = retryCount >= 2;
+      const currentModelName = usingFallbackModel ? this.fallbackModelName : this.modelName;
+
+      if (usingFallbackModel) {
+        console.log(`[TaskQueue] 切換至備援模型 ${currentModelName}`);
+      }
+
       const model = this.genAI.getGenerativeModel({ 
-        model: this.modelName,
+        model: currentModelName,
         generationConfig: this.generationConfig
       });
 
@@ -254,18 +275,41 @@ class TaskQueue {
       }
 
       // 處理答案：移除選項標記，只保留答案內容
-      let cleanAnswer = generatedQuestion.answer || '';
-      
+      let cleanAnswer = (generatedQuestion.answer || '').trim();
+
+      const leadingMarkers = [
+        /^答案\s*[為是:]?\s*/i,
+        /^答案[:：]\s*/i,
+        /^正確答案\s*[為是:]?\s*/i,
+        /^選項\s*[\(（]?[A-Za-z]?[\)）]?\s*(?:[:：]|[為是])?\s*/i,
+        /^選項\s*/i
+      ];
+
+      leadingMarkers.forEach(pattern => {
+        cleanAnswer = cleanAnswer.replace(pattern, '').trim();
+      });
+
       // 處理各種選項格式：
       // "選項(C):10" → "10"
       // "(C) 10" → "10"
       // "C: 10" → "10"
-      // "答案是 C" → "C"
-      cleanAnswer = cleanAnswer
-        .replace(/^選項\s*[\(（]?([A-Za-z]?)[\)）]?\s*[:：]\s*/i, '') // 移除 "選項(C):" 或 "選項C:"
-        .replace(/^[\(（]?([A-Za-z])[\)）]\s*[:：]?\s*/i, '')         // 移除 "(C):" 或 "(C)"
-        .replace(/^([A-Za-z])\s*[:：]\s*/i, '')                       // 移除 "C:"
-        .trim();
+      // "答案是 (A)452元" → "452元"
+      // 僅當前綴後仍有實質內容時才移除，以避免答案僅為選項字母
+      const leadingOptionPattern = /^[\(（]?[A-Za-z][\)）]?[\.]?\s*/;
+      if (leadingOptionPattern.test(cleanAnswer)) {
+        const stripped = cleanAnswer.replace(leadingOptionPattern, '').trim();
+        if (stripped.length > 0) {
+          cleanAnswer = stripped;
+        }
+      }
+
+      const colonOptionPattern = /^([A-Za-z])\s*[:：]\s*/;
+      if (colonOptionPattern.test(cleanAnswer)) {
+        const stripped = cleanAnswer.replace(colonOptionPattern, '').trim();
+        if (stripped.length > 0) {
+          cleanAnswer = stripped;
+        }
+      }
 
       console.log(`[TaskQueue] 原始答案: "${generatedQuestion.answer}" → 清理後: "${cleanAnswer}"`);
 
@@ -280,11 +324,20 @@ class TaskQueue {
       };
 
     } catch (error) {
-      // 如果失敗且還有重試次數
-      if (retryCount < this.maxRetries) {
-        console.log(`[TaskQueue] 生成失敗，重試第 ${retryCount + 1} 次...`);
-        await this.sleep(2000);
-        return this.generateSingleQuestion(sourceQuestion, retryCount + 1);
+      const errorInfo = this.normalizeGenerativeError(error);
+      const canRetry = retryCount < this.maxRetries && this.shouldRetry(errorInfo);
+
+      if (canRetry) {
+        const nextRetryCount = retryCount + 1;
+        const delayMs = this.getBackoffDelay(retryCount, errorInfo);
+        const fallbackNote = nextRetryCount >= 2 ? '，將改用備援模型' : '';
+        console.warn(`[TaskQueue] 生成失敗 (${errorInfo.shortMessage})，${(delayMs / 1000).toFixed(1)} 秒後重試第 ${nextRetryCount} 次${fallbackNote}...`);
+        await this.sleep(delayMs);
+        return this.generateSingleQuestion(sourceQuestion, nextRetryCount);
+      }
+
+      if (errorInfo && errorInfo.fullMessage) {
+        throw new Error(errorInfo.fullMessage);
       }
 
       throw error;
@@ -352,6 +405,110 @@ class TaskQueue {
       console.error('[TaskQueue] 解析 AI 回應失敗:', text);
       throw new Error('AI 回應格式錯誤');
     }
+  }
+
+  normalizeGenerativeError(error) {
+    if (!error) {
+      return null;
+    }
+
+    const status = error.status || error?.cause?.status || error?.response?.status;
+    const code = error.code || error?.cause?.code;
+    const message = error.message || '未知錯誤';
+    let reason = '';
+
+    if (error?.response?.promptFeedback?.blockReason) {
+      reason = `Prompt 被阻擋: ${error.response.promptFeedback.blockReason}`;
+    } else if (error?.response?.candidates?.[0]?.finishReason) {
+      reason = `finishReason: ${error.response.candidates[0].finishReason}`;
+    } else if (error?.cause?.message && error.cause.message !== message) {
+      reason = error.cause.message;
+    }
+
+    const detailParts = [];
+    if (status) detailParts.push(`狀態 ${status}`);
+    if (code) detailParts.push(`代碼 ${code}`);
+    if (reason) detailParts.push(reason);
+    const detailText = detailParts.join(' / ');
+
+    return {
+      status,
+      code,
+      message,
+      reason,
+      shortMessage: detailText ? `${message} (${detailText})` : message,
+      fullMessage: detailText ? `${message} (${detailText})` : message,
+      original: error
+    };
+  }
+
+  shouldRetry(errorInfo) {
+    if (!errorInfo) {
+      return false;
+    }
+
+    const lowerMessage = `${errorInfo.message || ''} ${errorInfo.reason || ''}`.toLowerCase();
+    const statusNum = typeof errorInfo.status === 'string' ? parseInt(errorInfo.status, 10) : errorInfo.status;
+
+    if (statusNum === 429) {
+      return true;
+    }
+
+    if (statusNum && statusNum >= 500) {
+      return true;
+    }
+
+    if (errorInfo.code && ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(errorInfo.code)) {
+      return true;
+    }
+
+    if (lowerMessage.includes('resource') && lowerMessage.includes('exhaust')) {
+      return true;
+    }
+
+    if (lowerMessage.includes('temporarily') && lowerMessage.includes('unavailable')) {
+      return true;
+    }
+
+    if (lowerMessage.includes('rate') && lowerMessage.includes('limit')) {
+      return true;
+    }
+
+    if (lowerMessage.includes('busy')) {
+      return true;
+    }
+
+    if (lowerMessage.includes('timeout') || lowerMessage.includes('超時')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  getBackoffDelay(retryCount, errorInfo) {
+    const baseDelay = this.backoffBaseMs * Math.pow(2, retryCount);
+    const jitter = Math.floor(Math.random() * 500);
+
+    if (this.isRateLimitError(errorInfo)) {
+      return baseDelay + 2000 + jitter;
+    }
+
+    return baseDelay + jitter;
+  }
+
+  isRateLimitError(errorInfo) {
+    if (!errorInfo) {
+      return false;
+    }
+
+    const lowerMessage = `${errorInfo.message || ''} ${errorInfo.reason || ''}`.toLowerCase();
+    const statusNum = typeof errorInfo.status === 'string' ? parseInt(errorInfo.status, 10) : errorInfo.status;
+
+    if (statusNum === 429) {
+      return true;
+    }
+
+    return lowerMessage.includes('rate limit') || lowerMessage.includes('resource exhausted');
   }
 
   /**
