@@ -17,9 +17,16 @@
       <div v-else class="record-container" v-for="(record, index) in records" :key="record.id" @click="toggle(index)">
         <div class="record-title">
           {{ formatDateOnly(record.submit_time) }} {{ record.topic }}
-          <span v-if="record.score !== null" class="score-badge" :class="getScoreBadgeClass(record.score)">
-            {{ record.score }} 分
-          </span>
+          <div class="badge-container">
+            <!-- 訂正狀態徽章 -->
+            <span class="correction-badge" :class="getCorrectionBadgeClass(record)">
+              {{ record.corrected ? '已訂正' : '未訂正' }}
+            </span>
+            <!-- 分數徽章 -->
+            <span v-if="record.score !== null" class="score-badge" :class="getScoreBadgeClass(record.score)">
+              {{ record.score }} 分
+            </span>
+          </div>
         </div>
 
         <div v-if="record.expanded" class="record-details" @click.stop>
@@ -319,6 +326,22 @@ function getScoreTextClass(score) {
     return 'text-pass';
   }
 }
+
+// 取得訂正徽章的 CSS class（簡化版）
+function getCorrectionBadgeClass(record) {
+  // 如果沒有分數（尚未批改），不顯示訂正狀態
+  if (record.score === null) {
+    return 'correction-none';
+  }
+  
+  // 滿分視為已訂正
+  if (record.score === 100) {
+    return 'correction-done';
+  }
+  
+  // 根據 corrected 欄位決定：已訂正 = 綠色，未訂正 = 紅色
+  return record.corrected ? 'correction-done' : 'correction-pending';
+}
 </script>
 
 <style scoped>
@@ -348,6 +371,38 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.badge-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 訂正狀態徽章樣式 */
+.correction-badge {
+  text-align: center;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: bold;
+  min-width: 60px;
+}
+
+/* 已訂正（綠色） */
+.correction-done {
+  background-color: #27ae60;
+}
+
+/* 未訂正（紅色） */
+.correction-pending {
+  background-color: #e74c3c;
+}
+
+/* 尚未批改時不顯示 */
+.correction-none {
+  display: none;
 }
 
 .score-badge {
