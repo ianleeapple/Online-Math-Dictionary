@@ -20,7 +20,7 @@
           <div class="badge-container">
             <!-- 訂正狀態徽章 -->
             <span class="correction-badge" :class="getCorrectionBadgeClass(record)">
-              {{ record.corrected ? '已訂正' : '未訂正' }}
+              {{ getCorrectionText(record) }}
             </span>
             <!-- 分數徽章 -->
             <span v-if="record.score !== null" class="score-badge" :class="getScoreBadgeClass(record.score)">
@@ -75,8 +75,8 @@
               </tr>
               <tr>
                 <td class="label">是否訂正</td>
-                <td :style="{ color: record.corrected ? 'green' : 'red' }">
-                  {{ record.corrected ? '已完成訂正' : '未完成訂正' }}
+                <td :style="{ color: getTableCorrectionColor(record) }">
+                  {{ getTableCorrectionText(record) }}
                 </td>
               </tr>
             </tbody>
@@ -327,7 +327,7 @@ function getScoreTextClass(score) {
   }
 }
 
-// 取得訂正徽章的 CSS class（簡化版）
+// 取得訂正徽章的 CSS class
 function getCorrectionBadgeClass(record) {
   // 如果沒有分數（尚未批改），不顯示訂正狀態
   if (record.score === null) {
@@ -341,6 +341,54 @@ function getCorrectionBadgeClass(record) {
   
   // 根據 corrected 欄位決定：已訂正 = 綠色，未訂正 = 紅色
   return record.corrected ? 'correction-done' : 'correction-pending';
+}
+
+// 取得訂正徽章的文字
+function getCorrectionText(record) {
+  // 如果沒有分數（尚未批改），不顯示
+  if (record.score === null) {
+    return '';
+  }
+  
+  // 滿分視為已訂正
+  if (record.score === 100) {
+    return '已訂正';
+  }
+  
+  // 根據 corrected 欄位決定文字
+  return record.corrected ? '已訂正' : '未訂正';
+}
+
+// 取得表格中訂正狀態的文字
+function getTableCorrectionText(record) {
+  // 如果沒有分數（尚未批改）
+  if (record.score === null) {
+    return '尚未批改';
+  }
+  
+  // 滿分視為已訂正
+  if (record.score === 100) {
+    return '已完成訂正';
+  }
+  
+  // 根據 corrected 欄位決定文字
+  return record.corrected ? '已完成訂正' : '未完成訂正';
+}
+
+// 取得表格中訂正狀態的顏色
+function getTableCorrectionColor(record) {
+  // 如果沒有分數（尚未批改）
+  if (record.score === null) {
+    return '#999';
+  }
+  
+  // 滿分或已訂正顯示綠色
+  if (record.score === 100 || record.corrected) {
+    return 'green';
+  }
+  
+  // 未訂正顯示紅色
+  return 'red';
 }
 </script>
 
