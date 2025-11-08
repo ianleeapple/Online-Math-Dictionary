@@ -48,6 +48,7 @@
               <th>主題</th>
               <th>觀念</th>
               <th>題目內容</th>
+              <th>選項</th>
               <th>題目附圖</th>
               <th>題型</th>
               <th>答案</th>
@@ -63,11 +64,30 @@
               <td>{{ q.concept }}</td>
               <td><MathContent :content="q.content" /></td>
               <td>
+                <div v-if="q.options && q.options.length > 0" class="options-cell">
+                  <div v-for="(opt, idx) in q.options" :key="idx" class="option-item">
+                    <MathContent :content="`(${String.fromCharCode(65 + idx)}) ${opt}`" />
+                  </div>
+                </div>
+                <span v-else>無</span>
+              </td>
+              <td>
                 <span v-if="q.image_url">有</span>
                 <span v-else>無</span>
               </td>
               <td>{{ getTypeName(q.type) }}</td>
-              <td><MathContent :content="q.answer" /></td>
+              <td>
+                <div v-if="q.type === 'single' || q.type === 'multiple'" class="answer-cell">
+                  <div v-for="(opt, idx) in q.options" :key="idx">
+                    <div v-if="isCorrectAnswer(q.answer, idx, q.options)" class="answer-item">
+                      ({{ String.fromCharCode(65 + idx) }}) <MathContent :content="opt" />
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="answer-cell">
+                  <MathContent :content="q.answer" />
+                </div>
+              </td>
               <td>{{ q.difficulty }}</td>
               <td>{{ formatDate(q.created_at) }}</td>
               <td>
@@ -119,36 +139,64 @@
 
         <div class="form-group">
           <label>題型 <span class="required">*</span></label>
-          <select v-model="editForm.type" required>
+          <select v-model="editForm.type" required disabled>
             <option value="single">單選題</option>
             <option value="multiple">多選題</option>
             <option value="fill">選填題</option>
           </select>
+          <p style="font-size: 12px; color: #999; margin-top: 5px;">※ 題型無法修改</p>
         </div>
 
-        <div class="form-group">
-          <label>答案 <span class="required">*</span></label>
-          
-          <!-- 單選題：4個選項 -->
-          <div v-if="editForm.type === 'single'" class="answer-options">
-            <label v-for="option in ['A', 'B', 'C', 'D']" :key="option" class="radio-option">
-              <input type="radio" :value="option" v-model="editForm.answer" />
-              {{ option }}
-            </label>
+        <!-- 單選題選項 -->
+        <div v-if="editForm.type === 'single'" class="form-group">
+          <label><h4>選項（請填寫4個選項並勾選正確答案）</h4></label>
+          <div v-for="(option, index) in editOptions" :key="index" class="option-input-row">
+            <input 
+              type="radio" 
+              name="editCorrectAnswer" 
+              :value="index" 
+              v-model="editSelectedAnswerIndex"
+              class="radio-input"
+            />
+            <span class="option-label">選項 {{ index + 1 }}：</span>
+            <input 
+              type="text" 
+              v-model="editOptions[index]" 
+              :placeholder="'請輸入選項 ' + (index + 1) + ' 的內容'"
+              class="option-text-input"
+            />
           </div>
+        </div>
 
-          <!-- 多選題：5個選項 -->
-          <div v-else-if="editForm.type === 'multiple'" class="answer-options">
-            <label v-for="option in ['A', 'B', 'C', 'D', 'E']" :key="option" class="checkbox-option">
-              <input type="checkbox" :value="option" :checked="editMultipleAnswers.includes(option)"@change="toggleEditMultipleAnswer(option)"/>
-              {{ option }}
-            </label>
+        <!-- 多選題選項 -->
+        <div v-else-if="editForm.type === 'multiple'" class="form-group">
+          <label><h4>選項（請填寫5個選項並勾選所有正確答案）</h4></label>
+          <div v-for="(option, index) in editOptions" :key="index" class="option-input-row">
+            <input 
+              type="checkbox" 
+              :value="index" 
+              v-model="editSelectedAnswerIndexes"
+              class="checkbox-input"
+            />
+            <span class="option-label">選項 {{ index + 1 }}：</span>
+            <input 
+              type="text" 
+              v-model="editOptions[index]" 
+              :placeholder="'請輸入選項 ' + (index + 1) + ' 的內容'"
+              class="option-text-input"
+            />
           </div>
+        </div>
 
-          <!-- 選填題：輸入框 -->
-          <div v-else-if="editForm.type === 'fill'">
-            <input type="text" v-model="editForm.answer" placeholder="請輸入答案"required/>
-          </div>
+        <!-- 選填題答案 -->
+        <div v-else-if="editForm.type === 'fill'" class="form-group">
+          <label><h4>答案</h4></label>
+          <input 
+            type="text" 
+            v-model="editForm.answer" 
+            placeholder="請輸入答案"
+            class="fill-answer-input"
+          />
         </div>
 
         <div class="form-group">
@@ -420,6 +468,13 @@ const editForm = ref({
   difficulty: ''
 });
 
+// 編輯時的選項陣列
+const editOptions = ref([]);
+
+// 編輯時的答案選擇
+const editSelectedAnswerIndex = ref(null); // 單選題
+const editSelectedAnswerIndexes = ref([]); // 多選題
+
 // 編輯時的多選題答案陣列
 const editMultipleAnswers = ref([]);
 
@@ -468,10 +523,12 @@ watch(() => editForm.value.type, (newType, oldType) => {
   if (!isEditingInit.value && oldType) {
     editForm.value.answer = '';
     editMultipleAnswers.value = [];
+    editSelectedAnswerIndex.value = null;
+    editSelectedAnswerIndexes.value = [];
   }
 });
 
-function editQuestion(question) {
+async function editQuestion(question) {
   editingQuestion.value = question;
   
   // 設定初始化標記
@@ -489,7 +546,78 @@ function editQuestion(question) {
     difficulty: question.difficulty || '中等'
   };
   
-  // 如果是多選題，解析答案為陣列
+  // 載入選項資料
+  if (question.type === 'single' || question.type === 'multiple') {
+    // 先初始化為空陣列（避免顯示舊資料）
+    editOptions.value = question.type === 'single' 
+      ? ['', '', '', ''] 
+      : ['', '', '', '', ''];
+    editSelectedAnswerIndex.value = null;
+    editSelectedAnswerIndexes.value = [];
+    
+    // 從後端取得完整的題目資料（包含選項）
+    try {
+      const response = await fetch(`/api/question/${question.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        
+        // 確保有選項資料
+        if (data.options && data.options.length > 0) {
+          editOptions.value = [...data.options]; // 複製陣列避免引用問題
+          
+          console.log('[編輯] 載入選項:', editOptions.value);
+          
+          // 根據答案內容找出對應的選項索引
+          const answerParts = question.answer.split(',').map(a => a.trim());
+          
+          if (question.type === 'single') {
+            // 單選題：找出答案對應的選項索引
+            const matchedIndex = editOptions.value.findIndex(opt => 
+              answerParts.some(ans => opt.trim() === ans.trim())
+            );
+            editSelectedAnswerIndex.value = matchedIndex !== -1 ? matchedIndex : null;
+            
+            console.log('[編輯] 單選題答案索引:', editSelectedAnswerIndex.value, '答案內容:', answerParts[0]);
+          } else if (question.type === 'multiple') {
+            // 多選題：找出所有答案對應的選項索引
+            editSelectedAnswerIndexes.value = [];
+            answerParts.forEach(answerContent => {
+              const idx = editOptions.value.findIndex(opt => opt.trim() === answerContent.trim());
+              if (idx !== -1) {
+                editSelectedAnswerIndexes.value.push(idx);
+              }
+            });
+            
+            console.log('[編輯] 多選題答案索引:', editSelectedAnswerIndexes.value, '答案內容:', answerParts);
+          }
+        } else {
+          console.warn('[編輯] API 回傳的選項為空，使用預設選項');
+          // 如果 API 沒有回傳選項，保持預設的空陣列
+          editOptions.value = question.type === 'single' 
+            ? ['', '', '', ''] 
+            : ['', '', '', '', ''];
+        }
+      } else {
+        throw new Error('載入題目失敗');
+      }
+    } catch (error) {
+      console.error('[編輯] 載入選項失敗:', error);
+      alert('載入選項失敗，請重試');
+      // 載入失敗時，使用預設的空陣列
+      editOptions.value = question.type === 'single' 
+        ? ['', '', '', ''] 
+        : ['', '', '', '', ''];
+      editSelectedAnswerIndex.value = null;
+      editSelectedAnswerIndexes.value = [];
+    }
+  } else {
+    // 選填題不需要選項
+    editOptions.value = [];
+    editSelectedAnswerIndex.value = null;
+    editSelectedAnswerIndexes.value = [];
+  }
+  
+  // 舊版多選題答案（保留相容性）
   if (question.type === 'multiple' && question.answer) {
     editMultipleAnswers.value = question.answer.split(',').map(a => a.trim());
   } else {
@@ -500,13 +628,18 @@ function editQuestion(question) {
     isEditingInit.value = false;
   }, 100);
   
-  console.log('編輯題目資料:', editForm.value);
+  console.log('[編輯] 題目資料:', editForm.value);
+  console.log('[編輯] 選項資料:', editOptions.value);
+  console.log('[編輯] 答案索引:', question.type === 'single' ? editSelectedAnswerIndex.value : editSelectedAnswerIndexes.value);
 }
 
 function cancelEdit() {
   editingQuestion.value = null;
   isEditingInit.value = false;
   editMultipleAnswers.value = [];
+  editOptions.value = [];
+  editSelectedAnswerIndex.value = null;
+  editSelectedAnswerIndexes.value = [];
   editForm.value = {
     id: null,
     level: '',
@@ -526,27 +659,77 @@ async function saveEdit() {
     return;
   }
 
-  // 檢查答案欄位是否已填寫
-  if (!editForm.value.answer || editForm.value.answer.trim() === '') {
-    alert('請選擇或填寫答案');
-    return;
+  // 驗證答案和選項
+  let finalAnswer = '';
+  let finalOptions = null;
+
+  if (editForm.value.type === 'single') {
+    // 驗證單選題選項
+    const hasEmptyOption = editOptions.value.some(opt => !opt || !opt.trim());
+    if (hasEmptyOption) {
+      alert('請填寫所有選項內容');
+      return;
+    }
+    if (editSelectedAnswerIndex.value === null || editSelectedAnswerIndex.value === undefined) {
+      alert('請選擇正確答案');
+      return;
+    }
+    
+    // 關鍵修正：答案儲存為選項內容（即時取得當前的選項內容）
+    finalAnswer = editOptions.value[editSelectedAnswerIndex.value].trim();
+    finalOptions = JSON.stringify(editOptions.value.map(opt => opt.trim()));
+    
+    console.log('單選題保存 - 答案索引:', editSelectedAnswerIndex.value, '答案內容:', finalAnswer);
+
+  } else if (editForm.value.type === 'multiple') {
+    // 驗證多選題選項
+    const hasEmptyOption = editOptions.value.some(opt => !opt || !opt.trim());
+    if (hasEmptyOption) {
+      alert('請填寫所有選項內容');
+      return;
+    }
+    if (editSelectedAnswerIndexes.value.length === 0) {
+      alert('請至少選擇一個正確答案');
+      return;
+    }
+    
+    // 關鍵修正：答案儲存為選項內容（即時取得當前的選項內容）
+    finalAnswer = editSelectedAnswerIndexes.value
+      .map(index => editOptions.value[index].trim())
+      .join(',');
+    finalOptions = JSON.stringify(editOptions.value.map(opt => opt.trim()));
+    
+    console.log('多選題保存 - 答案索引:', editSelectedAnswerIndexes.value, '答案內容:', finalAnswer);
+
+  } else if (editForm.value.type === 'fill') {
+    // 驗證選填題答案
+    if (!editForm.value.answer || !editForm.value.answer.trim()) {
+      alert('請填寫答案');
+      return;
+    }
+    finalAnswer = editForm.value.answer.trim();
   }
 
   try {
+    const updateData = {
+      level: editForm.value.level,
+      topic: editForm.value.topic,
+      concept: editForm.value.concept,
+      content: editForm.value.content,
+      type: editForm.value.type,
+      answer: finalAnswer,
+      difficulty: editForm.value.difficulty,
+      options: finalOptions
+    };
+    
+    console.log('提交更新資料:', updateData);
+
     const res = await fetch(`/api/question/${editForm.value.id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        level: editForm.value.level,
-        topic: editForm.value.topic,
-        concept: editForm.value.concept,
-        content: editForm.value.content,
-        type: editForm.value.type,
-        answer: editForm.value.answer,
-        difficulty: editForm.value.difficulty
-      })
+      body: JSON.stringify(updateData)
     });
 
     const rawText = await res.text();
@@ -858,9 +1041,16 @@ function clearCompletedTasks() {
   maybeStopPolling();
 }
 
-// 產生類題功能（舊版，保留但不使用）
-function generateSimilarQuestion(question) {
-  openGenerateDialog(question);
+// 判斷某個選項索引是否為正確答案
+function isCorrectAnswer(answer, optionIndex, questionOptions) {
+  if (!answer || !questionOptions || !questionOptions[optionIndex]) return false;
+  
+  // 答案現在儲存的是選項內容
+  const answerParts = answer.split(',').map(a => a.trim());
+  const currentOptionContent = questionOptions[optionIndex];
+  
+  // 檢查當前選項內容是否在正確答案列表中
+  return answerParts.includes(currentOptionContent);
 }
 
 // 元件掛載時啟動輪詢
@@ -968,58 +1158,77 @@ h2 { margin-bottom: 20px; }
 /* 設定各欄位寬度 */
 .question-table th:nth-child(1),
 .question-table td:nth-child(1) {
-  width: 5%;
+  width: 4%;
 }
 .question-table th:nth-child(2),
 .question-table td:nth-child(2) {
-  width: 11%;
+  width: 9%;
 }
 .question-table th:nth-child(3),
 .question-table td:nth-child(3) {
-  width: 9%;
+  width: 7%;
 }
 .question-table th:nth-child(4) {
-  width: 24%;
+  width: 18%;
   text-align: center;
 }
 .question-table td:nth-child(4) {
-  width: 24%;
-  max-width: 240px;
+  width: 18%;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: normal;
   text-align: left;
 }
-.question-table th:nth-child(5),
+.question-table th:nth-child(5) {
+  width: 16%;
+  text-align: center;
+}
 .question-table td:nth-child(5) {
-  width: 5%;
+  width: 16%;
+  max-width: 160px;
+  text-align: left;
 }
 .question-table th:nth-child(6),
 .question-table td:nth-child(6) {
   width: 6%;
+  white-space: nowrap;
 }
 .question-table th:nth-child(7),
 .question-table td:nth-child(7) {
-  width: 7%;
+  width: 5%;
 }
 .question-table th:nth-child(8),
 .question-table td:nth-child(8) {
-  width: 5%;
+  width: 6%;
 }
 .question-table th:nth-child(9),
 .question-table td:nth-child(9) {
-  width: 12%;
+  width: 5%;
 }
 .question-table th:nth-child(10),
 .question-table td:nth-child(10) {
+  width: 10%;
+}
+.question-table th:nth-child(11),
+.question-table td:nth-child(11) {
   width: 8%;
   min-width: 80px;
 }
-.question-thumbnail {
-  max-width: 100px;
-  max-height: 100px;
-  border-radius: 4px;
-  margin-top: 8px;
+
+/* 選項欄位樣式 */
+.options-cell {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.option-item {
+  margin-bottom: 4px;
+  padding: 2px 0;
+}
+
+.option-item:last-child {
+  margin-bottom: 0;
 }
 
 .action-buttons {
@@ -1173,6 +1382,22 @@ h2 { margin-bottom: 20px; }
   padding: 0;
   margin: 0;
 }
+
+/* 答案欄位樣式 */
+.answer-cell {
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: left;
+}
+
+.answer-item {
+  margin-bottom: 4px;
+}
+
+.answer-item:last-child {
+  margin-bottom: 0;
+}
+
 /* 類題生成相關樣式 */
 .question-preview {
   background-color: #f5f5f5;
@@ -1355,5 +1580,58 @@ h2 { margin-bottom: 20px; }
   color: #e74c3c;
   border-radius: 6px;
   font-size: 13px;
+}
+
+/* 編輯模態框中的選項輸入樣式 */
+.modal-content .option-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.modal-content .radio-input,
+.modal-content .checkbox-input {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.modal-content .option-label {
+  font-weight: bold;
+  min-width: 70px;
+  flex-shrink: 0;
+  color: #594237;
+  font-size: 14px;
+}
+
+.modal-content .option-text-input {
+  flex: 1;
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.modal-content .option-text-input:focus {
+  outline: none;
+  border-color: #d67b7b;
+}
+
+.modal-content .fill-answer-input {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.modal-content .fill-answer-input:focus {
+  outline: none;
+  border-color: #d67b7b;
 }
 </style>

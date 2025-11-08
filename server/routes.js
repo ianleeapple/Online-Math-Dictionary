@@ -163,37 +163,67 @@ router.post('/quizzes', async (req, res) => {
 
 // 新增題目 API
 router.post('/question', upload.single('image'), async (req, res) => {
+  const connection = await pool.getConnection();
+  
   try {
-    const { level, topic, concept, content, type, difficulty, answer } = req.body;
+    await connection.beginTransaction();
+    
+    const { level, topic, concept, content, type, difficulty, answer, options } = req.body;
+    
     if (!level || !topic || !concept || !content || !type || !difficulty) {
+      await connection.rollback();
       return res.status(400).json({
         success: false,
         message: '缺少必要欄位'
       });
     }
+    
     // 確保上傳目錄存在
     if (!fs.existsSync('./uploads')) {
       fs.mkdirSync('./uploads', { recursive: true });
     }
+    
     const image_url = req.file ? `/uploads/${req.file.filename}` : null;
-    const [result] = await pool.execute(
+    
+    // 插入題目主表
+    const [result] = await connection.execute(
       `INSERT INTO question (level, topic, concept, content, image_url, type, answer, difficulty)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [level, topic, concept, content, image_url, type, answer || null, difficulty]
     );
+    
+    const questionId = result.insertId;
+    
+    // 如果是單選題或多選題，插入選項
+    if ((type === 'single' || type === 'multiple') && options) {
+      const parsedOptions = JSON.parse(options);
+      
+      for (let i = 0; i < parsedOptions.length; i++) {
+        await connection.execute(
+          `INSERT INTO question_options (question_id, option_order, option_content)
+           VALUES (?, ?, ?)`,
+          [questionId, i, parsedOptions[i]]
+        );
+      }
+    }
+    
+    await connection.commit();
 
     res.json({
       success: true,
       message: '題目新增成功',
-      id: result.insertId
+      id: questionId
     });
 
   } catch (err) {
+    await connection.rollback();
     console.error('新增題目失敗:', err);
     res.status(500).json({
       success: false,
       message: err.message || '新增題目失敗'
     });
+  } finally {
+    connection.release();
   }
 });
 
@@ -228,6 +258,20 @@ router.get('/question', async (req, res) => {
     }
     
     const [rows] = await pool.query(query, params);
+    
+    // 為每個題目取得選項（如果是單選題或多選題）
+    for (const question of rows) {
+      if (question.type === 'single' || question.type === 'multiple') {
+        const [options] = await pool.query(
+          'SELECT option_content FROM question_options WHERE question_id = ? ORDER BY option_order',
+          [question.id]
+        );
+        question.options = options.map(opt => opt.option_content);
+      } else {
+        question.options = null;
+      }
+    }
+    
     res.json(rows);
     
   } catch (error) {
@@ -239,20 +283,66 @@ router.get('/question', async (req, res) => {
   }
 });
 
+// ========== 新增：取得單一題目 API ==========
+// GET /api/question/:id
+router.get('/question/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const [rows] = await pool.query('SELECT * FROM question WHERE id = ?', [id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: '找不到該題目' 
+      });
+    }
+    
+    const question = rows[0];
+    
+    // 如果是單選題或多選題，取得選項
+    if (question.type === 'single' || question.type === 'multiple') {
+      const [options] = await pool.query(
+        'SELECT option_content FROM question_options WHERE question_id = ? ORDER BY option_order',
+        [id]
+      );
+      question.options = options.map(opt => opt.option_content);
+    } else {
+      question.options = null;
+    }
+    
+    res.json(question);
+    
+  } catch (error) {
+    console.error('查詢題目失敗:', error);
+    res.status(500).json({ 
+      success: false,
+      message: '資料庫錯誤', 
+      error: error.message 
+    });
+  }
+});
+
 // 編輯題目 API
 router.put('/question/:id', async (req, res) => {
+  const connection = await pool.getConnection();
+  
   try {
+    await connection.beginTransaction();
+    
     const { id } = req.params;
-    const { level, topic, concept, content, type, answer, difficulty } = req.body;
+    const { level, topic, concept, content, type, answer, difficulty, options } = req.body;
 
     if (!level || !topic || !concept || !content || !type || !difficulty) {
+      await connection.rollback();
       return res.status(400).json({
         success: false,
         message: '缺少必要欄位'
       });
     }
 
-    const [result] = await pool.execute(
+    // 更新題目主表
+    const [result] = await connection.execute(
       `UPDATE question 
        SET level = ?, topic = ?, concept = ?, content = ?, type = ?, answer = ?, difficulty = ?
        WHERE id = ?`,
@@ -260,11 +350,33 @@ router.put('/question/:id', async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
+      await connection.rollback();
       return res.status(404).json({
         success: false,
         message: '找不到該題目'
       });
     }
+
+    // 如果是單選題或多選題，更新選項
+    if ((type === 'single' || type === 'multiple') && options) {
+      // 先刪除舊選項
+      await connection.execute(
+        'DELETE FROM question_options WHERE question_id = ?',
+        [id]
+      );
+      
+      // 插入新選項
+      const parsedOptions = JSON.parse(options);
+      for (let i = 0; i < parsedOptions.length; i++) {
+        await connection.execute(
+          `INSERT INTO question_options (question_id, option_order, option_content)
+           VALUES (?, ?, ?)`,
+          [id, i, parsedOptions[i]]
+        );
+      }
+    }
+
+    await connection.commit();
 
     res.json({
       success: true,
@@ -272,11 +384,14 @@ router.put('/question/:id', async (req, res) => {
     });
 
   } catch (err) {
+    await connection.rollback();
     console.error('更新題目失敗:', err);
     res.status(500).json({
       success: false,
       message: err.message || '更新題目失敗'
     });
+  } finally {
+    connection.release();
   }
 });
 
@@ -674,11 +789,11 @@ router.post('/quiz-records', async (req, res) => {
     concept,
     timingMode,
     answerTime,
-    timeLimit, // 新增:倒數計時的時間限制(分鐘)
+    timeLimit,
     difficulty,
     questionCount,
     questionTypes,
-    questions // 陣列：[{ questionId, questionOrder, userAnswer }, ...]
+    questions // 陣列：[{ questionId, questionOrder, userAnswer, optionOrder }, ...]
   } = req.body;
 
   // 驗證必要參數
@@ -696,7 +811,7 @@ router.post('/quiz-records', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    // 插入測驗記錄主表(新增 time_limit 欄位)
+    // 插入測驗記錄主表
     const [recordResult] = await connection.execute(
       `INSERT INTO quiz_records 
        (user_id, submit_time, topic, concept, timing_mode, answer_time, time_limit, difficulty, question_count, question_types, score, corrected)
@@ -705,13 +820,20 @@ router.post('/quiz-records', async (req, res) => {
     );
 
     const quizRecordId = recordResult.insertId;
-    // 插入測驗明細(每題的答案)
+    
+    // 插入測驗明細(每題的答案 + 選項順序)
     for (const q of questions) {
       await connection.execute(
         `INSERT INTO quiz_record_details 
-         (quiz_record_id, question_order, question_id, user_answer)
-         VALUES (?, ?, ?, ?)`,
-        [quizRecordId, q.questionOrder, q.questionId, q.userAnswer || null]
+         (quiz_record_id, question_order, question_id, user_answer, option_order)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          quizRecordId, 
+          q.questionOrder, 
+          q.questionId, 
+          q.userAnswer || null,
+          q.optionOrder ? JSON.stringify(q.optionOrder) : null // ========== 新增：儲存選項順序 ==========
+        ]
       );
     }
 
@@ -782,7 +904,7 @@ router.get('/quiz-records/:id', async (req, res) => {
 
     const record = records[0];
 
-    // 取得測驗明細(題目和答案)
+    // 取得測驗明細(題目和答案 + 選項順序)
     const [details] = await pool.query(
       `SELECT qrd.*, q.content, q.type, q.answer as correct_answer, q.image_url, q.difficulty as question_difficulty
        FROM quiz_record_details qrd
@@ -791,6 +913,32 @@ router.get('/quiz-records/:id', async (req, res) => {
        ORDER BY qrd.question_order`,
       [id]
     );
+
+    // ========== 解析選項順序並重組選項 ==========
+    for (const detail of details) {
+      if (detail.type === 'single' || detail.type === 'multiple') {
+        // 載入原始選項
+        const [options] = await pool.query(
+          'SELECT option_content FROM question_options WHERE question_id = ? ORDER BY option_order',
+          [detail.question_id]
+        );
+        const originalOptions = options.map(opt => opt.option_content);
+        
+        // 如果有儲存選項順序，按照該順序重組
+        if (detail.option_order) {
+          try {
+            const optionOrderArray = JSON.parse(detail.option_order);
+            detail.options = optionOrderArray.map(idx => originalOptions[idx]);
+          } catch (e) {
+            console.error('解析選項順序失敗:', e);
+            detail.options = originalOptions;
+          }
+        } else {
+          // 舊資料沒有選項順序，使用原始順序
+          detail.options = originalOptions;
+        }
+      }
+    }
 
     record.questions = details;
 
@@ -827,9 +975,9 @@ router.post('/quiz-records/:id/grade', async (req, res) => {
 
     const record = records[0];
 
-    // 取得測驗明細（題目、使用者答案、正確答案）
+    // 取得測驗明細（題目、使用者答案、正確答案、選項順序）
     const [details] = await pool.query(
-      `SELECT qrd.question_id, qrd.user_answer, q.answer as correct_answer, q.type
+      `SELECT qrd.question_id, qrd.user_answer, qrd.option_order, q.answer as correct_answer, q.type
        FROM quiz_record_details qrd
        JOIN question q ON qrd.question_id = q.id
        WHERE qrd.quiz_record_id = ?
@@ -844,54 +992,124 @@ router.post('/quiz-records/:id/grade', async (req, res) => {
       });
     }
 
+    // ========== 為每個題目載入原始選項資料並根據 option_order 重組 ==========
+    for (const detail of details) {
+      if (detail.type === 'single' || detail.type === 'multiple') {
+        // 載入原始選項（按照 option_order 順序）
+        const [options] = await pool.query(
+          'SELECT option_content FROM question_options WHERE question_id = ? ORDER BY option_order',
+          [detail.question_id]
+        );
+        const originalOptions = options.map(opt => opt.option_content);
+        
+        // ========== 關鍵修正：根據儲存的 option_order 重組選項 ==========
+        if (detail.option_order) {
+          try {
+            const optionOrderArray = JSON.parse(detail.option_order);
+            // 按照測驗時的順序重組選項
+            detail.options = optionOrderArray.map(idx => originalOptions[idx]);
+          } catch (e) {
+            console.error('解析選項順序失敗:', e);
+            detail.options = originalOptions;
+          }
+        } else {
+          // 舊資料沒有選項順序，使用原始順序
+          detail.options = originalOptions;
+        }
+      }
+    }
+
     // 計算成績
     const totalQuestions = details.length;
-    const pointsPerQuestion = 100 / totalQuestions; // 每題分數
+    const pointsPerQuestion = 100 / totalQuestions;
     let totalScore = 0;
     let correctCount = 0;
 
     details.forEach(detail => {
-      const { user_answer, correct_answer, type } = detail;
+      const { user_answer, correct_answer, type, options, question_id } = detail;
       let questionScore = 0;
 
       if (type === 'single') {
-        // 單選題(答對得分，答錯或未作答不得分)
-        if (user_answer && user_answer.trim() === correct_answer.trim()) {
-          questionScore = pointsPerQuestion;
-          correctCount++;
+        // 單選題：使用者答案是字母（A, B, C, D），需轉換為當時打亂後的選項內容
+        if (user_answer && user_answer.trim() !== '') {
+          const answerLetter = user_answer.trim();
+          const answerIndex = answerLetter.charCodeAt(0) - 65;
+          
+          if (answerIndex >= 0 && answerIndex < options.length) {
+            // ========== 關鍵：使用打亂後的選項列表 ==========
+            const userAnswerContent = options[answerIndex].trim();
+            const correctAnswerContent = correct_answer.trim();
+            
+            console.log(`[批改] 題目 #${question_id} (單選)`);
+            console.log(`  使用者選擇: ${answerLetter} = "${userAnswerContent}"`);
+            console.log(`  正確答案: "${correctAnswerContent}"`);
+            
+            if (userAnswerContent === correctAnswerContent) {
+              questionScore = pointsPerQuestion;
+              correctCount++;
+              console.log(`  ✅ 正確`);
+            } else {
+              console.log(`  ❌ 錯誤`);
+            }
+          } else {
+            console.log(`[批改] 題目 #${question_id} (單選) - 答案索引超出範圍`);
+          }
         }
       } else if (type === 'multiple') {
-        // 多選題(每個選項平均配分)
+        // 多選題：使用者答案是字母列表（A,C），需轉換為當時打亂後的選項內容
         if (!user_answer || user_answer.trim() === '') {
-          // 未作答，不給分
           questionScore = 0;
+          console.log(`[批改] 題目 #${question_id} (多選) - 未作答`);
         } else {
-          const userAnswers = user_answer.split(',').map(a => a.trim()).sort();
-          const correctAnswers = correct_answer.split(',').map(a => a.trim()).sort();
+          const userAnswerLetters = user_answer.split(',').map(a => a.trim());
           
-          // 多選題有 5 個選項(A~E)
-          const allOptions = ['A', 'B', 'C', 'D', 'E'];
-          const pointsPerOption = pointsPerQuestion / allOptions.length; // 每個選項的分數
+          // ========== 使用打亂後的選項列表 ==========
+          const userAnswerContents = userAnswerLetters
+            .map(letter => {
+              const index = letter.charCodeAt(0) - 65;
+              return (index >= 0 && index < options.length) ? options[index].trim() : null;
+            })
+            .filter(content => content !== null)
+            .sort();
           
-          allOptions.forEach(option => {
-            const shouldSelect = correctAnswers.includes(option); // 是否應該選
-            const didSelect = userAnswers.includes(option); // 使用者是否有選
+          const correctAnswerContents = correct_answer.split(',').map(a => a.trim()).sort();
+          
+          console.log(`[批改] 題目 #${question_id} (多選)`);
+          console.log(`  使用者選擇: ${userAnswerLetters.join(',')} = [${userAnswerContents.join(', ')}]`);
+          console.log(`  正確答案: [${correctAnswerContents.join(', ')}]`);
+          
+          // 計算多選題分數（每個選項獨立計分）
+          const allOptionsCount = options.length; // 使用實際選項數量
+          const pointsPerOption = pointsPerQuestion / allOptionsCount;
+          
+          for (let i = 0; i < allOptionsCount; i++) {
+            const optionContent = options[i].trim();
+            const shouldSelect = correctAnswerContents.includes(optionContent);
+            const didSelect = userAnswerContents.includes(optionContent);
             
-            // 該選且有選 或 不該選且沒選 => 得分
             if (shouldSelect === didSelect) {
               questionScore += pointsPerOption;
             }
-          });
+          }
+          
           // 檢查是否全對
-          if (JSON.stringify(userAnswers) === JSON.stringify(correctAnswers)) {
+          if (JSON.stringify(userAnswerContents) === JSON.stringify(correctAnswerContents)) {
             correctCount++;
+            console.log(`  ✅ 完全正確`);
+          } else {
+            console.log(`  ⚠️ 部分正確 (得分: ${questionScore.toFixed(2)})`);
           }
         }
       } else if (type === 'fill') {
-        // 選填題(答案完全相同才得分)
+        // 選填題：直接比對答案內容
         if (user_answer && user_answer.trim() === correct_answer.trim()) {
           questionScore = pointsPerQuestion;
           correctCount++;
+          console.log(`[批改] 題目 #${question_id} (選填) - ✅ 正確`);
+        } else {
+          console.log(`[批改] 題目 #${question_id} (選填) - ❌ 錯誤`);
+          console.log(`  使用者答案: "${user_answer}"`);
+          console.log(`  正確答案: "${correct_answer}"`);
         }
       }
 
@@ -907,7 +1125,7 @@ router.post('/quiz-records/:id/grade', async (req, res) => {
       [finalScore, id]
     );
 
-    console.log(`[批改] 測驗 #${id} 批改完成，成績: ${finalScore} 分 (答對 ${correctCount}/${totalQuestions} 題)`);
+    console.log(`[批改] 測驗 #${id} 批改完成，成績: ${finalScore} 分 (完全答對 ${correctCount}/${totalQuestions} 題)`);
 
     res.json({
       success: true,
@@ -928,35 +1146,379 @@ router.post('/quiz-records/:id/grade', async (req, res) => {
   }
 });
 
-// 取得單一題目
-router.get('/question/:id', async (req, res) => {
+// ==================== 訂正考卷相關 API ====================
+
+// 取得需要訂正的題目列表
+// GET /api/quiz-records/:id/corrections
+router.get('/quiz-records/:id/corrections', async (req, res) => {
   const { id } = req.params;
-  
+
   try {
-    const [rows] = await pool.query('SELECT * FROM question WHERE id = ?', [id]);
-    
-    if (rows.length === 0) {
-      return res.status(404).json({ 
+    // 取得測驗記錄
+    const [records] = await pool.query(
+      'SELECT * FROM quiz_records WHERE id = ?',
+      [id]
+    );
+
+    if (records.length === 0) {
+      return res.status(404).json({
         success: false,
-        message: '找不到該題目' 
+        message: '找不到該測驗記錄'
       });
     }
-    
-    res.json(rows[0]);
-    
+
+    // ========== 關鍵修正：查詢時包含 option_order 欄位 ==========
+    const [details] = await pool.query(
+      `SELECT qrd.*, q.content, q.type, q.answer as correct_answer, q.image_url, q.difficulty
+       FROM quiz_record_details qrd
+       JOIN question q ON qrd.question_id = q.id
+       WHERE qrd.quiz_record_id = ?
+       ORDER BY qrd.question_order`,
+      [id]
+    );
+
+    // ========== 為每個題目載入選項資料並重組 ==========
+    for (const detail of details) {
+      if (detail.type === 'single' || detail.type === 'multiple') {
+        // 載入原始選項
+        const [options] = await pool.query(
+          'SELECT option_content FROM question_options WHERE question_id = ? ORDER BY option_order',
+          [detail.question_id]
+        );
+        const originalOptions = options.map(opt => opt.option_content);
+        
+        // ========== 使用儲存的選項順序重組 ==========
+        if (detail.option_order) {
+          try {
+            const optionOrderArray = JSON.parse(detail.option_order);
+            detail.options = optionOrderArray.map(idx => originalOptions[idx]);
+          } catch (e) {
+            console.error('解析選項順序失敗:', e);
+            detail.options = originalOptions;
+          }
+        } else {
+          // 舊資料沒有選項順序，使用原始順序
+          detail.options = originalOptions;
+        }
+      } else {
+        detail.options = null;
+      }
+    }
+
+    // 篩選出答錯的題目
+    const wrongQuestions = [];
+
+    for (const detail of details) {
+      const { question_id, user_answer, correct_answer, type, options } = detail;
+      let isCorrect = false;
+
+      if (type === 'single') {
+        // 單選題：使用打亂後的選項判斷
+        if (user_answer && user_answer.trim() !== '') {
+          const answerLetter = user_answer.trim();
+          const answerIndex = answerLetter.charCodeAt(0) - 65;
+          
+          if (answerIndex >= 0 && answerIndex < options.length) {
+            const userAnswerContent = options[answerIndex].trim();
+            const correctAnswerContent = correct_answer.trim();
+            isCorrect = userAnswerContent === correctAnswerContent;
+          }
+        }
+      } else if (type === 'multiple') {
+        // 多選題：使用打亂後的選項判斷
+        if (user_answer && user_answer.trim() !== '') {
+          const userAnswerLetters = user_answer.split(',').map(a => a.trim());
+          const userAnswerContents = userAnswerLetters
+            .map(letter => {
+              const index = letter.charCodeAt(0) - 65;
+              return (index >= 0 && index < options.length) ? options[index].trim() : null;
+            })
+            .filter(content => content !== null)
+            .sort();
+          
+          const correctAnswerContents = correct_answer.split(',').map(a => a.trim()).sort();
+          isCorrect = JSON.stringify(userAnswerContents) === JSON.stringify(correctAnswerContents);
+        }
+      } else if (type === 'fill') {
+        // 選填題：直接比對答案內容
+        isCorrect = user_answer && user_answer.trim() === correct_answer.trim();
+      }
+
+      // 如果答錯，檢查是否已訂正
+      if (!isCorrect) {
+        const [correctionRecords] = await pool.query(
+          'SELECT corrected FROM correction_records WHERE quiz_record_id = ? AND question_id = ?',
+          [id, question_id]
+        );
+
+        const alreadyCorrected = correctionRecords.length > 0 && correctionRecords[0].corrected;
+
+        if (!alreadyCorrected) {
+          wrongQuestions.push(detail);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      quizRecordId: id,
+      wrongQuestions: wrongQuestions,
+      totalWrong: wrongQuestions.length
+    });
+
   } catch (error) {
-    console.error('查詢題目失敗:', error);
-    res.status(500).json({ 
+    console.error('取得訂正題目失敗:', error);
+    res.status(500).json({
       success: false,
-      message: '資料庫錯誤', 
-      error: error.message 
+      message: '取得訂正題目失敗',
+      error: error.message
     });
   }
 });
 
+// 提交單題訂正
+// POST /api/quiz-records/:id/corrections/:questionId
+router.post('/quiz-records/:id/corrections/:questionId', async (req, res) => {
+  const { id, questionId } = req.params;
+  const { userAnswer } = req.body;
 
-const aiConfig = require('./aiConfig');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+  try {
+    // ========== 關鍵修正：取得測驗記錄中的選項順序 ==========
+    const [recordDetails] = await pool.query(
+      'SELECT option_order FROM quiz_record_details WHERE quiz_record_id = ? AND question_id = ?',
+      [id, questionId]
+    );
+
+    // 取得題目資訊（包含選項）
+    const [questions] = await pool.query(
+      'SELECT * FROM question WHERE id = ?',
+      [questionId]
+    );
+
+    if (questions.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '找不到該題目'
+      });
+    }
+
+    const question = questions[0];
+    const { answer: correctAnswer, type } = question; // ========== 修正：使用 correctAnswer 變數 ==========
+
+    // 載入原始選項資料並根據測驗時的順序重組
+    let options = [];
+    if (type === 'single' || type === 'multiple') {
+      const [optionRows] = await pool.query(
+        'SELECT option_content FROM question_options WHERE question_id = ? ORDER BY option_order',
+        [questionId]
+      );
+      const originalOptions = optionRows.map(opt => opt.option_content);
+      
+      // ========== 關鍵：使用測驗時的選項順序重組選項 ==========
+      if (recordDetails.length > 0 && recordDetails[0].option_order) {
+        try {
+          const optionOrderArray = JSON.parse(recordDetails[0].option_order);
+          // 按照測驗時打亂後的順序重組選項
+          options = optionOrderArray.map(idx => originalOptions[idx]);
+          
+          console.log(`[訂正批改] 題目 #${questionId}`);
+          console.log(`  原始選項順序: [0,1,2,3,...]`);
+          console.log(`  測驗時順序: [${optionOrderArray.join(',')}]`);
+          console.log(`  重組後選項: [${options.join(', ')}]`);
+        } catch (e) {
+          console.error('解析選項順序失敗:', e);
+          options = originalOptions;
+        }
+      } else {
+        // 舊資料沒有選項順序，使用原始順序
+        console.log(`[訂正批改] 題目 #${questionId} 沒有選項順序記錄，使用原始順序`);
+        options = originalOptions;
+      }
+    }
+
+    // 判斷答案是否正確（使用打亂後的選項進行轉換）
+    let isCorrect = false;
+
+    if (type === 'single') {
+      // 單選題：使用者答案是字母（A, B, C, D），需轉換為打亂後選項的內容
+      if (userAnswer && userAnswer.trim() !== '') {
+        const answerLetter = userAnswer.trim();
+        const answerIndex = answerLetter.charCodeAt(0) - 65; // A=0, B=1, C=2...
+        
+        if (answerIndex >= 0 && answerIndex < options.length) {
+          // ========== 關鍵：使用打亂後的選項列表轉換 ==========
+          const userAnswerContent = options[answerIndex].trim(); // 使用者選擇的選項內容
+          const correctAnswerContent = correctAnswer.trim();     // ========== 修正：使用 correctAnswer ==========
+          
+          console.log(`[訂正批改] 單選題 #${questionId}`);
+          console.log(`  使用者選擇: ${answerLetter} (索引 ${answerIndex})`);
+          console.log(`  選項內容: "${userAnswerContent}"`);
+          console.log(`  正確答案內容: "${correctAnswerContent}"`);
+          
+          isCorrect = userAnswerContent === correctAnswerContent;
+          
+          console.log(`  判斷結果: ${isCorrect ? '✅ 正確' : '❌ 錯誤'}`);
+        } else {
+          console.log(`[訂正批改] 單選題 #${questionId} - 答案索引超出範圍`);
+        }
+      }
+    } else if (type === 'multiple') {
+      // 多選題：使用者答案是字母列表（A,C），需轉換為打亂後選項的內容列表
+      if (userAnswer && userAnswer.trim() !== '') {
+        const userAnswerLetters = userAnswer.split(',').map(a => a.trim());
+        
+        // ========== 關鍵：使用打亂後的選項列表轉換 ==========
+        const userAnswerContents = userAnswerLetters
+          .map(letter => {
+            const index = letter.charCodeAt(0) - 65;
+            return (index >= 0 && index < options.length) ? options[index].trim() : null;
+          })
+          .filter(content => content !== null)
+          .sort();
+        
+        const correctAnswerContents = correctAnswer.split(',').map(a => a.trim()).sort(); // ========== 修正：使用 correctAnswer ==========
+        
+        console.log(`[訂正批改] 多選題 #${questionId}`);
+        console.log(`  使用者選擇: ${userAnswerLetters.join(',')} → [${userAnswerContents.join(', ')}]`);
+        console.log(`  正確答案內容: [${correctAnswerContents.join(', ')}]`);
+        
+        isCorrect = JSON.stringify(userAnswerContents) === JSON.stringify(correctAnswerContents);
+        
+        console.log(`  判斷結果: ${isCorrect ? '✅ 正確' : '❌ 錯誤'}`);
+      } else {
+        console.log(`[訂正批改] 多選題 #${questionId} - 未作答`);
+      }
+    } else if (type === 'fill') {
+      // 選填題：直接比對答案內容
+      isCorrect = userAnswer && userAnswer.trim() === correctAnswer.trim(); // ========== 修正：使用 correctAnswer ==========
+      
+      console.log(`[訂正批改] 選填題 #${questionId}`);
+      console.log(`  使用者答案: "${userAnswer}"`);
+      console.log(`  正確答案: "${correctAnswer}"`);
+      console.log(`  判斷結果: ${isCorrect ? '✅ 正確' : '❌ 錯誤'}`);
+    }
+
+    if (isCorrect) {
+      // 答對了，記錄訂正成功
+      await pool.query(
+        `INSERT INTO correction_records (quiz_record_id, question_id, corrected, corrected_at)
+         VALUES (?, ?, TRUE, NOW())
+         ON DUPLICATE KEY UPDATE corrected = TRUE, corrected_at = NOW()`,
+        [id, questionId]
+      );
+
+      // 檢查是否所有錯題都已訂正完成
+      const [details] = await pool.query(
+        `SELECT qrd.*, q.type, q.answer as correct_answer
+         FROM quiz_record_details qrd
+         JOIN question q ON qrd.question_id = q.id
+         WHERE qrd.quiz_record_id = ?`,
+        [id]
+      );
+
+      // 載入所有題目的選項資料（使用打亂後的順序）
+      for (const detail of details) {
+        if (detail.type === 'single' || detail.type === 'multiple') {
+          const [optionRows] = await pool.query(
+            'SELECT option_content FROM question_options WHERE question_id = ? ORDER BY option_order',
+            [detail.question_id]
+          );
+          const originalOptions = optionRows.map(opt => opt.option_content);
+          
+          if (detail.option_order) {
+            try {
+              const optionOrderArray = JSON.parse(detail.option_order);
+              detail.options = optionOrderArray.map(idx => originalOptions[idx]);
+            } catch (e) {
+              detail.options = originalOptions;
+            }
+          } else {
+            detail.options = originalOptions;
+          }
+        }
+      }
+
+      let allCorrected = true;
+
+      // 檢查其他錯題是否都已訂正
+      for (const detail of details) {
+        const { question_id, user_answer, correct_answer, type, options } = detail;
+        let wasCorrect = false;
+
+        if (type === 'single') {
+          if (user_answer && user_answer.trim() !== '') {
+            const answerLetter = user_answer.trim();
+            const answerIndex = answerLetter.charCodeAt(0) - 65;
+            
+            if (answerIndex >= 0 && answerIndex < options.length) {
+              const userAnswerContent = options[answerIndex].trim();
+              const correctAnswerContent = correct_answer.trim();
+              wasCorrect = userAnswerContent === correctAnswerContent;
+            }
+          }
+        } else if (type === 'multiple') {
+          if (user_answer && user_answer.trim() !== '') {
+            const userAnswerLetters = user_answer.split(',').map(a => a.trim());
+            const userAnswerContents = userAnswerLetters
+              .map(letter => {
+                const index = letter.charCodeAt(0) - 65;
+                return (index >= 0 && index < options.length) ? options[index].trim() : null;
+              })
+              .filter(content => content !== null)
+              .sort();
+            
+            const correctAnswerContents = correct_answer.split(',').map(a => a.trim()).sort();
+            wasCorrect = JSON.stringify(userAnswerContents) === JSON.stringify(correctAnswerContents);
+          }
+        } else if (type === 'fill') {
+          wasCorrect = user_answer && user_answer.trim() === correct_answer.trim();
+        }
+
+        if (!wasCorrect) {
+          const [correctionRecords] = await pool.query(
+            'SELECT corrected FROM correction_records WHERE quiz_record_id = ? AND question_id = ?',
+            [id, question_id]
+          );
+
+          if (correctionRecords.length === 0 || !correctionRecords[0].corrected) {
+            allCorrected = false;
+            break;
+          }
+        }
+      }
+
+      // 如果所有錯題都已訂正，更新測驗記錄
+      if (allCorrected) {
+        await pool.query(
+          'UPDATE quiz_records SET corrected = TRUE WHERE id = ?',
+          [id]
+        );
+      }
+
+      res.json({
+        success: true,
+        correct: true,
+        allCorrected: allCorrected,
+        message: '作答正確，此題已訂正完成！'
+      });
+    } else {
+      res.json({
+        success: true,
+        correct: false,
+        message: '作答不正確，請重新訂正！'
+      });
+    }
+
+  } catch (error) {
+    console.error('訂正題目失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '訂正題目失敗',
+      error: error.message
+    });
+  }
+});
+
 // ========================================================
 // AI 類題生成測試 API (使用 Google Gemini)
 // ========================================================
@@ -1190,7 +1752,7 @@ router.post('/ai/generate', async (req, res) => {
               for (const key in obj) {
                 restored[key] = restoreLatex(obj[key]);
               }
-              return obj;
+              return restored;
             }
             return obj;
           };
@@ -1221,7 +1783,6 @@ router.post('/ai/generate', async (req, res) => {
   }
 });
 
-// ========================================================
 // ========================================================
 // TTS 文字轉語音 API (支援 Gemini TTS、OpenAI TTS)
 // ========================================================
@@ -1546,214 +2107,6 @@ router.get('/generation-tasks/user/:userId', async (req, res) => {
     res.status(500).json({ 
       error: '查詢使用者任務失敗',
       details: error.message
-    });
-  }
-});
-
-// ==================== 訂正考卷相關 API ====================
-
-// 取得需要訂正的題目列表
-// GET /api/quiz-records/:id/corrections
-router.get('/quiz-records/:id/corrections', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    // 取得測驗記錄
-    const [records] = await pool.query(
-      'SELECT * FROM quiz_records WHERE id = ?',
-      [id]
-    );
-
-    if (records.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: '找不到該測驗記錄'
-      });
-    }
-
-    // 取得測驗明細（題目、使用者答案、正確答案）
-    const [details] = await pool.query(
-      `SELECT qrd.*, q.content, q.type, q.answer as correct_answer, q.image_url, q.difficulty
-       FROM quiz_record_details qrd
-       JOIN question q ON qrd.question_id = q.id
-       WHERE qrd.quiz_record_id = ?
-       ORDER BY qrd.question_order`,
-      [id]
-    );
-
-    // 篩選出答錯的題目
-    const wrongQuestions = [];
-
-    for (const detail of details) {
-      const { question_id, user_answer, correct_answer, type } = detail;
-      let isCorrect = false;
-
-      if (type === 'single') {
-        isCorrect = user_answer && user_answer.trim() === correct_answer.trim();
-      } else if (type === 'multiple') {
-        if (user_answer && user_answer.trim() !== '') {
-          const userAnswers = user_answer.split(',').map(a => a.trim()).sort();
-          const correctAnswers = correct_answer.split(',').map(a => a.trim()).sort();
-          isCorrect = JSON.stringify(userAnswers) === JSON.stringify(correctAnswers);
-        }
-      } else if (type === 'fill') {
-        isCorrect = user_answer && user_answer.trim() === correct_answer.trim();
-      }
-
-      // 如果答錯，檢查是否已訂正
-      if (!isCorrect) {
-        const [correctionRecords] = await pool.query(
-          'SELECT corrected FROM correction_records WHERE quiz_record_id = ? AND question_id = ?',
-          [id, question_id]
-        );
-
-        const alreadyCorrected = correctionRecords.length > 0 && correctionRecords[0].corrected;
-
-        if (!alreadyCorrected) {
-          wrongQuestions.push({
-            ...detail,
-            options: type === 'single' 
-              ? ['(A)', '(B)', '(C)', '(D)'] 
-              : type === 'multiple'
-              ? ['(A)', '(B)', '(C)', '(D)', '(E)']
-              : null
-          });
-        }
-      }
-    }
-
-    res.json({
-      success: true,
-      quizRecordId: id,
-      wrongQuestions: wrongQuestions,
-      totalWrong: wrongQuestions.length
-    });
-
-  } catch (error) {
-    console.error('取得訂正題目失敗:', error);
-    res.status(500).json({
-      success: false,
-      message: '取得訂正題目失敗',
-      error: error.message
-    });
-  }
-});
-
-// 提交單題訂正
-// POST /api/quiz-records/:id/corrections/:questionId
-router.post('/quiz-records/:id/corrections/:questionId', async (req, res) => {
-  const { id, questionId } = req.params;
-  const { userAnswer } = req.body;
-
-  try {
-    // 取得題目資訊
-    const [questions] = await pool.query(
-      'SELECT * FROM question WHERE id = ?',
-      [questionId]
-    );
-
-    if (questions.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: '找不到該題目'
-      });
-    }
-
-    const question = questions[0];
-    const { answer: correctAnswer, type } = question;
-
-    // 判斷答案是否正確
-    let isCorrect = false;
-
-    if (type === 'single') {
-      isCorrect = userAnswer && userAnswer.trim() === correctAnswer.trim();
-    } else if (type === 'multiple') {
-      if (userAnswer && userAnswer.trim() !== '') {
-        const userAnswers = userAnswer.split(',').map(a => a.trim()).sort();
-        const correctAnswers = correctAnswer.split(',').map(a => a.trim()).sort();
-        isCorrect = JSON.stringify(userAnswers) === JSON.stringify(correctAnswers);
-      }
-    } else if (type === 'fill') {
-      isCorrect = userAnswer && userAnswer.trim() === correctAnswer.trim();
-    }
-
-    if (isCorrect) {
-      // 答對了，記錄訂正成功（修正：移除多餘的引號）
-      await pool.query(
-        `INSERT INTO correction_records (quiz_record_id, question_id, corrected, corrected_at)
-         VALUES (?, ?, TRUE, NOW())
-         ON DUPLICATE KEY UPDATE corrected = TRUE, corrected_at = NOW()`,
-        [id, questionId]
-      );
-
-      // 檢查是否所有錯題都已訂正完成
-      const [details] = await pool.query(
-        `SELECT qrd.*, q.type, q.answer as correct_answer
-         FROM quiz_record_details qrd
-         JOIN question q ON qrd.question_id = q.id
-         WHERE qrd.quiz_record_id = ?`,
-        [id]
-      );
-
-      let allCorrected = true;
-
-      for (const detail of details) {
-        const { question_id, user_answer, correct_answer, type } = detail;
-        let wasCorrect = false;
-
-        if (type === 'single') {
-          wasCorrect = user_answer && user_answer.trim() === correct_answer.trim();
-        } else if (type === 'multiple') {
-          if (user_answer && user_answer.trim() !== '') {
-            const userAnswers = user_answer.split(',').map(a => a.trim()).sort();
-            const correctAnswers = correct_answer.split(',').map(a => a.trim()).sort();
-            wasCorrect = JSON.stringify(userAnswers) === JSON.stringify(correctAnswers);
-          }
-        } else if (type === 'fill') {
-          wasCorrect = user_answer && user_answer.trim() === correct_answer.trim();
-        }
-
-        if (!wasCorrect) {
-          const [correctionRecords] = await pool.query(
-            'SELECT corrected FROM correction_records WHERE quiz_record_id = ? AND question_id = ?',
-            [id, question_id]
-          );
-
-          if (correctionRecords.length === 0 || !correctionRecords[0].corrected) {
-            allCorrected = false;
-            break;
-          }
-        }
-      }
-
-      // 如果所有錯題都已訂正，更新測驗記錄
-      if (allCorrected) {
-        await pool.query(
-          'UPDATE quiz_records SET corrected = TRUE WHERE id = ?',
-          [id]
-        );
-      }
-
-      res.json({
-        success: true,
-        correct: true,
-        allCorrected: allCorrected,
-        message: '作答正確，此題已訂正完成！'
-      });
-    } else {
-      res.json({
-        success: true,
-        correct: false,
-        message: '作答不正確，請重新訂正！'
-      });
-    }
-
-  } catch (error) {
-    console.error('訂正題目失敗:', error);
-    res.status(500).json({
-      success: false,
-      message: '訂正題目失敗',
-      error: error.message
     });
   }
 });
