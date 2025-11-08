@@ -51,26 +51,26 @@
         <div class="options">
           <!-- 單選題 -->
           <div v-if="currentQuestion.type === 'single'">
-            <label v-for="(opt, idx) in currentQuestion.options" :key="idx">
+            <label v-for="(opt, idx) in currentQuestion.options" :key="idx" class="option-label">
               <input 
                 type="radio" 
                 :name="'q' + currentIndex" 
                 :value="idx" 
                 v-model="answers[currentIndex]"
               > 
-              {{ opt }}
+              <MathContent :content="opt" />
             </label>
           </div>
 
           <!-- 多選題 -->
           <div v-else-if="currentQuestion.type === 'multiple'">
-            <label v-for="(opt, idx) in currentQuestion.options" :key="idx">
+            <label v-for="(opt, idx) in currentQuestion.options" :key="idx" class="option-label">
               <input 
                 type="checkbox" 
                 :value="idx" 
                 v-model="answers[currentIndex]"
               > 
-              {{ opt }}
+              <MathContent :content="opt" />
             </label>
           </div>
 
@@ -747,16 +747,31 @@ onBeforeRouteLeave((to, from, next) => {
   cursor: pointer;
 }
 
-.options label {
-  display: block;
-  margin-bottom: 10px;
-  padding-left: 5px;
+
+.options {
+  margin: 20px 0;
+}
+
+.option-label {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding: 10px;
+  border-radius: 6px;
   cursor: pointer;
+  transition: background-color 0.2s;
+  line-height: 1.6;
+}
+
+.option-label:hover {
+  background-color: #f8f9fa;
 }
 
 .options input[type="radio"],
 .options input[type="checkbox"] {
-  margin-right: 8px;
+  margin-right: 10px;
+  margin-top: 4px;
+  flex-shrink: 0;
   cursor: pointer;
 }
 
