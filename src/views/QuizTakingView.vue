@@ -119,7 +119,7 @@ const quizInfo = ref({
   timingMode: 'unlimited'
 });
 
-// 題目列表
+// 題目列表（新增選項順序記錄）
 const questions = ref([]);
 
 // 載入狀態
@@ -189,6 +189,45 @@ function prevQuestion() {
 // 是否已完成測驗(判斷中離測驗是否需要提醒)
 const isExamCompleted = ref(false);
 
+// ========== 隨機打亂陣列的函數 ==========
+function shuffleArray(array) {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+// ========== 打亂選項並記錄順序 ==========
+function shuffleOptions(question) {
+  if (question.type !== 'single' && question.type !== 'multiple') {
+    return { ...question, optionOrder: null };
+  }
+
+  // 取得原始選項（移除字母前綴）
+  const originalOptions = question.options.map(opt => {
+    const match = opt.match(/^\([A-E]\)\s*(.*)$/);
+    return match ? match[1] : opt;
+  });
+
+  // 建立索引陣列並打亂
+  const indices = originalOptions.map((_, idx) => idx);
+  const shuffledIndices = shuffleArray(indices);
+
+  // 根據打亂後的索引重組選項
+  const shuffledOptions = shuffledIndices.map((originalIdx, newIdx) => {
+    const letter = String.fromCharCode(65 + newIdx); // 使用新位置的字母
+    return `(${letter}) ${originalOptions[originalIdx]}`;
+  });
+
+  return {
+    ...question,
+    options: shuffledOptions,
+    optionOrder: shuffledIndices // 記錄打亂後的原始索引順序
+  };
+}
+
 // 交卷提示
 async function submitExam(autoSubmit = false) {
   // 如果是手動交卷，顯示確認對話框
@@ -219,7 +258,8 @@ async function submitExam(autoSubmit = false) {
     const questionsData = questions.value.map((q, index) => ({
       questionId: q.id,
       questionOrder: index + 1,
-      userAnswer: formatAnswer(answers.value[index], q.type)
+      userAnswer: formatAnswer(answers.value[index], q.type),
+      optionOrder: q.optionOrder || null // ========== 新增：儲存選項順序 ==========
     }));
 
     // 計算實際的時間限制(分鐘)
@@ -386,15 +426,22 @@ async function loadQuizData() {
       timingMode: timing || 'forward'
     };
 
-    // ========== 再做一次功能:載入指定題目 ==========
+    // ========== 再做一次功能:載入指定題目（不打亂選項） ==========
     if (retake === 'true' && questionIds) {
-      console.log('📝 再做一次功能:載入指定題目');
+      console.log('📝 再做一次功能:載入指定題目（保持原始選項順序）');
 
       const idArray = questionIds.split(',').map(id => parseInt(id));
       console.log('題目 ID 列表:', idArray);
       
-      // 逐一取得每個題目(保持順序)
+      // 逐一取得每個題目並從測驗記錄中還原選項順序
       const fetchedQuestions = [];
+      
+      // 先取得測驗記錄以獲取選項順序
+      const recordResponse = await fetch(`/api/quiz-records/${route.query.recordId || ''}`);
+      let recordData = null;
+      if (recordResponse.ok) {
+        recordData = await recordResponse.json();
+      }
       
       for (const id of idArray) {
         try {
@@ -406,59 +453,76 @@ async function loadQuizData() {
           }
           
           const question = await response.json();
-          fetchedQuestions.push(question);
+          
+          // 從測驗記錄中找到對應題目的選項順序
+          const recordDetail = recordData?.questions.find(q => q.question_id === id);
+          
+          let formattedOptions = null;
+          let optionOrder = null;
+          
+          if (question.type === 'single' || question.type === 'multiple') {
+            if (question.options && Array.isArray(question.options) && question.options.length > 0) {
+              // 如果有儲存的選項順序，使用該順序
+              if (recordDetail?.option_order) {
+                try {
+                  optionOrder = JSON.parse(recordDetail.option_order);
+                  formattedOptions = optionOrder.map((originalIdx, newIdx) => {
+                    const letter = String.fromCharCode(65 + newIdx);
+                    return `(${letter}) ${question.options[originalIdx]}`;
+                  });
+                } catch (e) {
+                  console.error('解析選項順序失敗:', e);
+                  // 解析失敗，使用原始順序
+                  formattedOptions = question.options.map((opt, idx) => {
+                    const letter = String.fromCharCode(65 + idx);
+                    return `(${letter}) ${opt}`;
+                  });
+                  optionOrder = question.options.map((_, idx) => idx);
+                }
+              } else {
+                // 沒有選項順序記錄，使用原始順序
+                formattedOptions = question.options.map((opt, idx) => {
+                  const letter = String.fromCharCode(65 + idx);
+                  return `(${letter}) ${opt}`;
+                });
+                optionOrder = question.options.map((_, idx) => idx);
+              }
+            }
+          }
+          
+          fetchedQuestions.push({
+            id: question.id,
+            content: question.content,
+            type: question.type,
+            answer: question.answer,
+            difficulty: question.difficulty,
+            image_url: question.image_url,
+            options: formattedOptions,
+            optionOrder: optionOrder // 保存選項順序
+          });
           
         } catch (error) {
           console.error(`載入題目 #${id} 失敗:`, error);
         }
       }
       
-      console.log('成功載入題目數量:', fetchedQuestions.length);
-      
-      if (fetchedQuestions.length === 0) {
-        alert('無法載入題目,請返回測驗記錄頁面重試');
-        router.push('/quiz/records');
-        return;
-      }
-      
-      // 將題目轉換為測驗格式(保持原有順序)
-      questions.value = fetchedQuestions.map(q => ({
-        id: q.id,
-        content: q.content,
-        type: q.type,
-        answer: q.answer,
-        difficulty: q.difficulty,
-        image_url: q.image_url,
-        options: q.type === 'single' 
-          ? ['(A)', '(B)', '(C)', '(D)'] 
-          : q.type === 'multiple'
-          ? ['(A)', '(B)', '(C)', '(D)', '(E)']
-          : null
-      }));
-      
-      console.log('重考模式:題目已載入,順序保持不變');
-      console.log('計時設定:', {
-        isCountdown: isCountdown.value,
-        timeLimit: timeLimit.value,
-        timeLimitMinutes: timeLimitParam
-      });
+      console.log('重考模式:題目已載入,保持原始選項順序');
+      questions.value = fetchedQuestions;
       
     } 
-    // ========== 一般模式:從 API 隨機抓取題目 ==========
+    // ========== 一般模式:從 API 隨機抓取題目（打亂選項） ==========
     else {
-      console.log('📝 一般模式:隨機抓取題目');
+      console.log('📝 一般模式:隨機抓取題目（打亂選項順序）');
       
       // 建立 API 查詢參數
       const params = new URLSearchParams();
       if (level) params.append('level', level);
       if (topic) params.append('topic', topic);
       
-      // 關鍵修改:只有當 concept 不是「所有觀念」時,才加入篩選
       if (concept && concept !== '所有觀念') {
         params.append('concept', concept);
       }
       
-      // 難度也要處理「系統自動」的情況
       if (difficulty && difficulty !== '系統自動') {
         params.append('difficulty', difficulty);
       }
@@ -475,7 +539,7 @@ async function loadQuizData() {
       const data = await response.json();
       console.log('從 API 取得題目數量:', data.length);
 
-      // 篩選題型(如果有指定)
+      // 篩選題型
       let filteredQuestions = data;
       if (types) {
         const typeList = types.split(',');
@@ -498,26 +562,47 @@ async function loadQuizData() {
 
       console.log('最終題目數量:', filteredQuestions.length);
 
-      // 將題目轉換為測驗格式
-      questions.value = filteredQuestions.map(q => ({
-        id: q.id,
-        content: q.content,
-        type: q.type,
-        answer: q.answer,
-        difficulty: q.difficulty,
-        image_url: q.image_url,
-        options: q.type === 'single' 
-          ? ['(A)', '(B)', '(C)', '(D)'] 
-          : q.type === 'multiple'
-          ? ['(A)', '(B)', '(C)', '(D)', '(E)']
-          : null
-      }));
+      // 格式化選項並隨機打亂
+      questions.value = filteredQuestions.map(q => {
+        let formattedOptions = null;
+        let optionOrder = null;
+        
+        if (q.type === 'single' || q.type === 'multiple') {
+          if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+            formattedOptions = q.options.map((opt, idx) => {
+              const letter = String.fromCharCode(65 + idx);
+              return `(${letter}) ${opt}`;
+            });
+            optionOrder = q.options.map((_, idx) => idx);
+          } else {
+            formattedOptions = q.type === 'single' 
+              ? ['(A)', '(B)', '(C)', '(D)'] 
+              : ['(A)', '(B)', '(C)', '(D)', '(E)'];
+            optionOrder = formattedOptions.map((_, idx) => idx);
+          }
+        }
+        
+        const question = {
+          id: q.id,
+          content: q.content,
+          type: q.type,
+          answer: q.answer,
+          difficulty: q.difficulty,
+          image_url: q.image_url,
+          options: formattedOptions,
+          optionOrder: optionOrder
+        };
+        
+        // ========== 新增：隨機打亂選項 ==========
+        return shuffleOptions(question);
+      });
       
-      // 按照題型排序:單選題 -> 多選題 -> 選填題
+      // 按照題型排序
       const typeOrder = { 'single': 1, 'multiple': 2, 'fill': 3 };
       questions.value.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
 
       console.log('排序後題目順序:', questions.value.map(q => q.type));
+      console.log('一般模式:選項已隨機打亂');
     }
     
     // 初始化答案陣列

@@ -38,30 +38,30 @@
           <img :src="question.image_url" :alt="'第 ' + question.question_order + ' 題附圖'" />
         </div>
 
-        <!-- 選項區域 -->
+        <!-- ========== 修正：使用 formattedOptions 顯示選項 ========== -->
         <div class="options">
           <!-- 單選題 -->
           <div v-if="question.type === 'single'">
-            <label v-for="(opt, idx) in question.options" :key="idx">
+            <label v-for="(opt, idx) in question.formattedOptions" :key="idx">
               <input 
                 type="radio" 
                 :name="'q' + question.question_id" 
                 :value="idx" 
                 v-model="answers[question.question_id]"
               > 
-              {{ opt }}
+              <MathContent :content="opt" />
             </label>
           </div>
 
           <!-- 多選題 -->
           <div v-else-if="question.type === 'multiple'">
-            <label v-for="(opt, idx) in question.options" :key="idx">
+            <label v-for="(opt, idx) in question.formattedOptions" :key="idx">
               <input 
                 type="checkbox" 
                 :value="idx" 
                 v-model="answers[question.question_id]"
               > 
-              {{ opt }}
+              <MathContent :content="opt" />
             </label>
           </div>
 
@@ -115,7 +115,62 @@ async function loadWrongQuestions() {
     }
 
     const data = await response.json();
-    wrongQuestions.value = data.wrongQuestions;
+    
+    // ========== 關鍵修正：為每個題目載入選項資料並使用測驗時的選項順序 ==========
+    const questionsWithOptions = [];
+    
+    for (const question of data.wrongQuestions) {
+      if (question.type === 'single' || question.type === 'multiple') {
+        // 載入原始選項
+        const optionResponse = await fetch(`/api/question/${question.question_id}`);
+        
+        if (optionResponse.ok) {
+          const questionDetail = await optionResponse.json();
+          const originalOptions = questionDetail.options || [];
+          
+          // ========== 使用測驗記錄中儲存的選項順序（與詳解頁面相同邏輯）==========
+          if (question.option_order) {
+            try {
+              const optionOrderArray = JSON.parse(question.option_order);
+              
+              // 按照測驗時的順序重組選項
+              const shuffledOptions = optionOrderArray.map(idx => originalOptions[idx]);
+              
+              // 加上 (A) (B) (C) 標號
+              question.formattedOptions = shuffledOptions.map((opt, idx) => {
+                const letter = String.fromCharCode(65 + idx);
+                return `(${letter}) ${opt}`;
+              });
+              
+              console.log(`[訂正] 題目 #${question.question_id} 使用儲存的選項順序:`, optionOrderArray);
+            } catch (e) {
+              console.error('解析選項順序失敗:', e);
+              // 解析失敗，使用原始順序
+              question.formattedOptions = originalOptions.map((opt, idx) => {
+                const letter = String.fromCharCode(65 + idx);
+                return `(${letter}) ${opt}`;
+              });
+            }
+          } else {
+            // 舊資料沒有選項順序記錄，使用原始順序
+            console.log(`[訂正] 題目 #${question.question_id} 沒有選項順序記錄，使用原始順序`);
+            question.formattedOptions = originalOptions.map((opt, idx) => {
+              const letter = String.fromCharCode(65 + idx);
+              return `(${letter}) ${opt}`;
+            });
+          }
+        } else {
+          console.warn(`[訂正] 載入題目 #${question.question_id} 失敗`);
+          question.formattedOptions = [];
+        }
+      } else {
+        question.formattedOptions = null;
+      }
+      
+      questionsWithOptions.push(question);
+    }
+    
+    wrongQuestions.value = questionsWithOptions;
 
     // 初始化答案物件
     wrongQuestions.value.forEach(q => {

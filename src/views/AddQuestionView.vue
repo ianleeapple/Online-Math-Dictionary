@@ -3,8 +3,7 @@
     <h2>新增題目</h2>
 
     <div class="form-container">
-
-      <!-- 新增：範圍選單 -->
+      <!-- 範圍選單 -->
       <div class="form-group">
         <label><h3>請選擇範圍</h3></label>
         <select v-model="selectedLevel">
@@ -35,10 +34,10 @@
       <!-- 題目內容 -->
       <div class="form-group">
         <label><h3>題目內容</h3></label>
-        <textarea v-model="newQuestion.text" rows="6" placeholder="請輸入題目&#10;若題目為單選題，請確保題目為四個選項。&#10;若題目為多選題，請確保題目為五個選項。&#10;並且選項請以英文字母大寫依序命名。"></textarea>
+        <textarea v-model="newQuestion.text" rows="6" placeholder="請輸入題目內容"></textarea>
       </div>
 
-      <!-- 新增：題目附圖 -->
+      <!-- 題目附圖 -->
       <div class="form-group">
         <label><h3>題目附圖（選填）</h3></label>
         <input type="file" @change="handleImageUpload" accept=".png,.jpg,.jpeg" ref="fileInput"/>
@@ -58,32 +57,57 @@
         </select>
       </div>
 
-      <!-- 答案欄位 -->
+      <!-- 選項與答案區域 -->
       <div class="form-group">
-        <label><h3>答案</h3></label>
-        
-        <!-- 單選題(4個選項) -->
-        <div v-if="newQuestion.type === 'single'" class="answer-options">
-          <label v-for="option in ['A', 'B', 'C', 'D']" :key="option" class="radio-option">
-            <input type="radio" :value="option" v-model="newQuestion.answer" />
-            {{ option }}
-          </label>
+        <!-- 單選題選項 (4個) -->
+        <div v-if="newQuestion.type === 'single'">
+          <label><h3>選項（請填寫4個選項並勾選正確答案）</h3></label>
+          <div v-for="(option, index) in singleOptions" :key="index" class="option-input-row">
+            <input 
+              type="radio" 
+              name="correctAnswer" 
+              :value="index" 
+              v-model="selectedAnswerIndex"
+              class="radio-input"
+            />
+            <span class="option-label">選項 {{ index + 1 }}：</span>
+            <input 
+              type="text" 
+              v-model="singleOptions[index]" 
+              :placeholder="'請輸入選項 ' + (index + 1) + ' 的內容'"
+              class="option-text-input"
+            />
+          </div>
         </div>
 
-        <!-- 多選題(5個選項) -->
-        <div v-else-if="newQuestion.type === 'multiple'" class="answer-options">
-          <label v-for="option in ['A', 'B', 'C', 'D', 'E']" :key="option" class="checkbox-option">
-            <input type="checkbox" :value="option" :checked="multipleAnswers.includes(option)"@change="toggleMultipleAnswer(option)"/>
-            {{ option }}
-          </label>
+        <!-- 多選題選項 (5個) -->
+        <div v-else-if="newQuestion.type === 'multiple'">
+          <label><h3>選項（請填寫5個選項並勾選所有正確答案）</h3></label>
+          <div v-for="(option, index) in multipleOptions" :key="index" class="option-input-row">
+            <input 
+              type="checkbox" 
+              :value="index" 
+              v-model="selectedAnswerIndexes"
+              class="checkbox-input"
+            />
+            <span class="option-label">選項 {{ index + 1 }}：</span>
+            <input 
+              type="text" 
+              v-model="multipleOptions[index]" 
+              :placeholder="'請輸入選項 ' + (index + 1) + ' 的內容'"
+              class="option-text-input"
+            />
+          </div>
         </div>
 
-        <!-- 選填題(暫定輸入框) -->
+        <!-- 選填題答案 -->
         <div v-else-if="newQuestion.type === 'fill'">
+          <label><h3>答案</h3></label>
           <input 
             type="text" 
-            v-model="newQuestion.answer" 
+            v-model="fillAnswer" 
             placeholder="請輸入答案"
+            class="fill-answer-input"
           />
         </div>
       </div>
@@ -175,10 +199,22 @@ const selectedDifficulty = ref('')
 const newQuestion = ref({
   text: '',
   type: 'single',
-  answer: '',
   imageFile: null,
   imagePreview: null,
 });
+
+// 單選題選項 (4個)
+const singleOptions = ref(['', '', '', '']);
+// 單選題答案索引
+const selectedAnswerIndex = ref(null);
+
+// 多選題選項 (5個)
+const multipleOptions = ref(['', '', '', '', '']);
+// 多選題答案索引陣列
+const selectedAnswerIndexes = ref([]);
+
+// 選填題答案
+const fillAnswer = ref('');
 
 // 多選題答案陣列
 const multipleAnswers = ref([]);
@@ -241,10 +277,17 @@ function toggleMultipleAnswer(option) {
   newQuestion.value.answer = multipleAnswers.value.join(',');
 }
 
-// 監聽題型變化，重置答案
+// 監聽題型變化，重置選項和答案
 watch(() => newQuestion.value.type, (newType) => {
-  newQuestion.value.answer = '';
-  multipleAnswers.value = [];
+  if (newType === 'single') {
+    singleOptions.value = ['', '', '', ''];
+    selectedAnswerIndex.value = null;
+  } else if (newType === 'multiple') {
+    multipleOptions.value = ['', '', '', '', ''];
+    selectedAnswerIndexes.value = [];
+  } else if (newType === 'fill') {
+    fillAnswer.value = '';
+  }
 });
 
 async function addQuestion() {
@@ -253,11 +296,6 @@ async function addQuestion() {
   if (!selectedTopic.value) return alert('請選擇主題');
   if (!selectedConcept.value) return alert('請選擇觀念');
   if (!selectedDifficulty.value) return alert('請選擇難易度');
-  
-  // 檢查答案欄位是否已填寫
-  if (!newQuestion.value.answer || newQuestion.value.answer.trim() === '') {
-    return alert('請選擇或填寫答案');
-  }
 
   const formData = new FormData();
   formData.append('level', selectedLevel.value);
@@ -265,11 +303,52 @@ async function addQuestion() {
   formData.append('concept', selectedConcept.value);
   formData.append('content', newQuestion.value.text);
   formData.append('type', newQuestion.value.type);
-  formData.append('answer', newQuestion.value.answer || '');
   formData.append('difficulty', selectedDifficulty.value);
-  
+
   if (newQuestion.value.imageFile) {
     formData.append('image', newQuestion.value.imageFile);
+  }
+
+  // 根據題型處理答案和選項
+  if (newQuestion.value.type === 'single') {
+    // 驗證選項和答案
+    const hasEmptyOption = singleOptions.value.some(opt => !opt.trim());
+    if (hasEmptyOption) {
+      return alert('請填寫所有選項內容');
+    }
+    if (selectedAnswerIndex.value === null) {
+      return alert('請選擇正確答案');
+    }
+
+    // 答案儲存為選項內容（而非索引）
+    formData.append('answer', singleOptions.value[selectedAnswerIndex.value]);
+    // 選項陣列
+    formData.append('options', JSON.stringify(singleOptions.value));
+
+  } else if (newQuestion.value.type === 'multiple') {
+    // 驗證選項和答案
+    const hasEmptyOption = multipleOptions.value.some(opt => !opt.trim());
+    if (hasEmptyOption) {
+      return alert('請填寫所有選項內容');
+    }
+    if (selectedAnswerIndexes.value.length === 0) {
+      return alert('請至少選擇一個正確答案');
+    }
+
+    // 答案儲存為選項內容（而非索引），用逗號分隔
+    const correctAnswers = selectedAnswerIndexes.value
+      .map(index => multipleOptions.value[index])
+      .join(',');
+    formData.append('answer', correctAnswers);
+    // 選項陣列
+    formData.append('options', JSON.stringify(multipleOptions.value));
+
+  } else if (newQuestion.value.type === 'fill') {
+    // 驗證答案
+    if (!fillAnswer.value.trim()) {
+      return alert('請填寫答案');
+    }
+    formData.append('answer', fillAnswer.value);
   }
 
   try {
@@ -283,22 +362,24 @@ async function addQuestion() {
     }
 
     alert('題目新增成功！');
-    
+
     // 重置表單
     newQuestion.value = {
       text: '',
       type: 'single',
-      answer: '',
       imageFile: null,
       imagePreview: null
     };
-    multipleAnswers.value = [];
+    singleOptions.value = ['', '', '', ''];
+    selectedAnswerIndex.value = null;
+    multipleOptions.value = ['', '', '', '', ''];
+    selectedAnswerIndexes.value = [];
+    fillAnswer.value = '';
 
-    // 移除檔名顯示
     if (fileInput.value) {
       fileInput.value.value = '';
     }
-    
+
     selectedLevel.value = '';
     selectedTopic.value = '';
     selectedConcept.value = '';
@@ -326,7 +407,11 @@ function goToQuestionBank() {
   background-color: #f9f9f9;
   padding: 20px;
 }
-h2 { margin-bottom: 20px; }
+
+h2 { 
+  margin-bottom: 20px; 
+}
+
 .form-container {
   background: #fff;
   padding: 20px;
@@ -336,16 +421,22 @@ h2 { margin-bottom: 20px; }
   width: 100%;
   box-sizing: border-box;
 }
-.form-group { margin-bottom: 15px; }
+
+.form-group { 
+  margin-bottom: 15px; 
+}
+
 .form-group > label {
   display: block;
   margin-bottom: 6px;
   font-weight: bold;
   color: #2d2d2d;
 }
-.form-group input,
-.form-group textarea,
-.form-group select {
+
+/* 只針對直接子元素的 input、textarea、select 套用樣式 */
+.form-group > input,
+.form-group > textarea,
+.form-group > select {
   width: 100%;
   padding: 10px;
   font-size: 14px;
@@ -368,22 +459,29 @@ h2 { margin-bottom: 20px; }
   cursor: pointer;
   font-size: 14px;
 }
-.btn:hover { background-color: #c06565; }
+
+.btn:hover { 
+  background-color: #c06565; 
+}
+
 .btn-row {
   display: flex;
   gap: 10px;
   align-items: center;
   margin-top: 12px;
 }
+
 .image-preview {
   margin-top: 10px;
   position: relative;
 }
+
 .image-preview img {
   max-width: 100%;
   max-height: 300px;
   border-radius: 6px;
 }
+
 .remove-btn {
   position: absolute;
   top: 10px;
@@ -391,36 +489,56 @@ h2 { margin-bottom: 20px; }
   background: #d67b7b;
 }
 
-.answer-options {
-  display: flex;
-  gap: 15px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
-.radio-option,
-.checkbox-option {
+/* 選項輸入區域 */
+.option-input-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 8px 12px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  transition: all 0.2s;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.radio-option:hover,
-.checkbox-option:hover {
-  background-color: #f0f0f0;
+.radio-input,
+.checkbox-input {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.option-label {
+  font-weight: bold;
+  min-width: 70px;
+  flex-shrink: 0;
+  color: #594237;
+  font-size: 14px;
+}
+
+.option-text-input {
+  flex: 1;
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.option-text-input:focus {
+  outline: none;
   border-color: #d67b7b;
 }
 
-.radio-option input,
-.checkbox-option input {
-  cursor: pointer;
-  width: auto;
-  padding: 0;
-  margin: 0;
+.fill-answer-input {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.fill-answer-input:focus {
+  outline: none;
+  border-color: #d67b7b;
 }
 </style>

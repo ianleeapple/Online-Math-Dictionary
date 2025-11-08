@@ -68,9 +68,19 @@ CREATE TABLE IF NOT EXISTS question (
   content TEXT NOT NULL,
   image_url VARCHAR(255) NULL,
   type ENUM('single', 'multiple', 'fill') NOT NULL,
-  answer TEXT NULL,
+  answer TEXT NULL COMMENT '選填題答案或正確選項的索引(逗號分隔)',
   difficulty ENUM('容易', '中等', '困難', '魔王') NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 題目選項表(單選題4個、多選題5個)
+CREATE TABLE IF NOT EXISTS question_options (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  question_id INT NOT NULL,
+  option_order INT NOT NULL COMMENT '選項順序 0-3(單選) 或 0-4(多選)',
+  option_content TEXT NOT NULL COMMENT '選項內容',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
 );
 
 -- AI 題目生成任務佇列表
@@ -114,6 +124,7 @@ CREATE TABLE IF NOT EXISTS quiz_record_details (
   question_order INT NOT NULL COMMENT '題目順序',
   question_id INT NOT NULL,
   user_answer TEXT NULL COMMENT '使用者的答案',
+  option_order TEXT NULL COMMENT '選項順序（JSON陣列，記錄打亂後的索引順序）',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (quiz_record_id) REFERENCES quiz_records(id) ON DELETE CASCADE,
   FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
