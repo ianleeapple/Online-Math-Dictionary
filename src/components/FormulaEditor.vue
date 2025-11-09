@@ -241,7 +241,7 @@ onMounted(() => {
     smartMode: true,
     smartFence: true,
     smartSuperscript: true,
-    inlineShortcuts: 'default',
+    inlineShortcuts: null,
     locale: 'zh-tw',
     virtualKeyboardMode: 'manual',
     customVirtualKeyboardLayers: 'numeric greek symbols',
