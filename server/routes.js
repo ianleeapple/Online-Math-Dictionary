@@ -5,6 +5,8 @@ const { hashPassword, verifyPassword } = require('./auth');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const aiConfig = require('./aiConfig');
 
 // 設定檔案上傳
 const storage = multer.diskStorage({
