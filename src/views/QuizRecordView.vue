@@ -16,7 +16,7 @@
       <!-- 測驗記錄列表 -->
       <div v-else class="record-container" v-for="(record, index) in records" :key="record.id" @click="toggle(index)">
         <div class="record-title">
-          {{ formatDateOnly(record.submit_time) }} {{ record.topic }}
+          {{ formatDateTime(record.submit_time) }} {{ record.topic }}
           <div class="badge-container">
             <!-- 訂正狀態徽章 -->
             <span class="correction-badge" :class="getCorrectionBadgeClass(record)">
@@ -34,7 +34,7 @@
             <tbody>
               <tr>
                 <td class="label">交卷時間</td>
-                <td>{{ formatDateOnly(record.submit_time) }}</td>
+                <td>{{ formatDateTime(record.submit_time) }}</td>
               </tr>
               <tr>
                 <td class="label">主題</td>
@@ -253,14 +253,62 @@ function goToQuizCreate() {
   router.push({ name: 'QuizCreate' });
 }
 
-// 格式化日期（只顯示日期，不顯示時間）
+// 格式化完整日期時間（包含時分秒）
+function formatDateTime(datetime) {
+  if (!datetime) return '';
+  
+  try {
+    const date = new Date(datetime);
+    
+    // 檢查日期是否有效
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date:', datetime);
+      return '日期格式錯誤';
+    }
+    
+    // 直接加上 8 小時 (UTC+8)
+    date.setHours(date.getHours() + 8);
+    
+    // 格式化顯示（包含時分秒）
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    const second = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${year}/${month}/${day} ${hour}:${minute}:${second}`;
+  } catch (error) {
+    console.error('formatDateTime error:', error);
+    return '日期格式錯誤';
+  }
+}
+
 function formatDateOnly(datetime) {
-  const date = new Date(datetime);
-  return date.toLocaleDateString('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
+  if (!datetime) return '';
+  
+  try {
+    const date = new Date(datetime);
+    
+    // 檢查日期是否有效
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date:', datetime);
+      return '日期格式錯誤';
+    }
+    
+    // 直接加上 8 小時 (UTC+8)
+    date.setHours(date.getHours() + 8);
+    
+    // 格式化顯示 (只顯示日期)
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    return `${year}/${month}/${day}`;
+  } catch (error) {
+    console.error('formatDateOnly error:', error);
+    return '日期格式錯誤';
+  }
 }
 
 // 格式化作答時間
