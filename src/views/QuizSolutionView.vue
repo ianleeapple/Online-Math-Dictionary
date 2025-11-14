@@ -1,6 +1,5 @@
 <template>
   <div class="solution-page">
-    <h2>測驗詳解</h2>
 
     <!-- 載入中 -->
     <div v-if="loading" style="text-align: center; padding: 40px;">
@@ -11,43 +10,45 @@
     <div v-else-if="quizRecord" class="quiz-info-card">
       <h3>測驗資訊</h3>
       <table class="info-table">
-        <tr>
-          <td class="label">交卷時間</td>
-          <td>{{ formatDateTime(quizRecord.submit_time) }}</td>
-        </tr>
-        <tr>
-          <td class="label">主題</td>
-          <td>{{ quizRecord.topic }}</td>
-        </tr>
-        <tr>
-          <td class="label">觀念</td>
-          <td>{{ quizRecord.concept }}</td>
-        </tr>
-        <tr>
-          <td class="label">計時方式</td>
-          <td>{{ getTimingModeLabel(quizRecord.timing_mode) }}</td>
-        </tr>
-        <tr>
-          <td class="label">作答時間</td>
-          <td>{{ formatDuration(quizRecord.answer_time) }}</td>
-        </tr>
-        <tr>
-          <td class="label">難易度</td>
-          <td>{{ quizRecord.difficulty }}</td>
-        </tr>
-        <tr>
-          <td class="label">題數</td>
-          <td>{{ quizRecord.question_count }} 題</td>
-        </tr>
-        <tr>
-          <td class="label">測驗成績</td>
-          <td>
-            <span v-if="quizRecord.score !== null" :class="getScoreClass(quizRecord.score)">
-              {{ quizRecord.score }} 分
-            </span>
-            <span v-else style="color: #999;">尚未批改</span>
-          </td>
-        </tr>
+        <tbody>
+          <tr>
+            <td class="label">交卷時間</td>
+            <td>{{ formatDateTime(quizRecord.submit_time) }}</td>
+          </tr>
+          <tr>
+            <td class="label">主題</td>
+            <td>{{ quizRecord.topic }}</td>
+          </tr>
+          <tr>
+            <td class="label">觀念</td>
+            <td>{{ quizRecord.concept }}</td>
+          </tr>
+          <tr>
+            <td class="label">計時方式</td>
+            <td>{{ getTimingModeLabel(quizRecord.timing_mode) }}</td>
+          </tr>
+          <tr>
+            <td class="label">作答時間</td>
+            <td>{{ formatDuration(quizRecord.answer_time) }}</td>
+          </tr>
+          <tr>
+            <td class="label">難易度</td>
+            <td>{{ quizRecord.difficulty }}</td>
+          </tr>
+          <tr>
+            <td class="label">題數</td>
+            <td>{{ quizRecord.question_count }} 題</td>
+          </tr>
+          <tr>
+            <td class="label">測驗成績</td>
+            <td>
+              <span v-if="quizRecord.score !== null" :class="getScoreClass(quizRecord.score)">
+                {{ quizRecord.score }} 分
+              </span>
+              <span v-else style="color: #999;">尚未批改</span>
+            </td>
+          </tr>
+        </tbody>
       </table>
 
       <!-- 題目列表 -->
@@ -88,14 +89,14 @@
             <div class="answer-row">
               <span class="label">你的答案：</span>
               <span :class="{ 'correct-text': isCorrect(question), 'wrong-text': !isCorrect(question) }">
-                <MathContent :content="getUserAnswerDisplay(question)" />
+                {{ getAnswerLetterOnly(question.user_answer, question.type) }}
               </span>
             </div>
 
             <div class="answer-row">
               <span class="label">正確答案：</span>
               <span class="correct-text">
-                <MathContent :content="getCorrectAnswerDisplay(question)" />
+                {{ getCorrectAnswerLetterOnly(question) }}
               </span>
             </div>
           </div>
@@ -212,16 +213,35 @@ async function loadQuizDetail() {
   }
 }
 
-// 格式化日期時間
+// 格式化日期時間(直接加 8 小時) 
 function formatDateTime(datetime) {
-  const date = new Date(datetime);
-  return date.toLocaleString('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  if (!datetime) return '';
+  
+  try {
+    const date = new Date(datetime);
+    
+    // 檢查日期是否有效
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date:', datetime);
+      return '日期格式錯誤';
+    }
+    
+    // 直接加上 8 小時 (UTC+8)
+    date.setHours(date.getHours() + 8);
+    
+    // 格式化顯示
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    const second = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${year}/${month}/${day} ${hour}:${minute}:${second}`;
+  } catch (error) {
+    console.error('formatDateTime error:', error);
+    return '日期格式錯誤';
+  }
 }
 
 // 格式化作答時間
@@ -397,6 +417,64 @@ function viewVideoSolution(question, questionNumber) {
 // 查看所需知識點
 function viewKnowledge(question, questionNumber) {
   alert('還沒做');
+}
+
+// 取得使用者答案代號（顯示括號）
+function getAnswerLetterOnly(user_answer, type) {
+  if (!user_answer || user_answer.trim() === '') {
+    return '未作答';
+  }
+
+  if (type === 'single') {
+    // 單選題：回傳 (A) 格式
+    const letter = user_answer.trim();
+    return `(${letter})`;
+  } else if (type === 'multiple') {
+    // 多選題：回傳 (A), (C) 格式
+    const letters = user_answer.split(',').map(a => a.trim()).sort();
+    return letters.map(letter => `(${letter})`).join(', ');
+  } else if (type === 'fill') {
+    // 選填題：顯示完整答案
+    return user_answer;
+  }
+
+  return user_answer;
+}
+
+// 取得正確答案代號（顯示括號）
+function getCorrectAnswerLetterOnly(question) {
+  const { correct_answer, type, options } = question;
+
+  if (!correct_answer || correct_answer.trim() === '') {
+    return '無';
+  }
+
+  if (type === 'single') {
+    // 單選題：回傳 (B) 格式
+    const answerContent = correct_answer.trim();
+    const answerIndex = options.findIndex(opt => opt.trim() === answerContent);
+    if (answerIndex !== -1) {
+      const letter = String.fromCharCode(65 + answerIndex);
+      return `(${letter})`;
+    }
+    return answerContent;
+  } else if (type === 'multiple') {
+    // 多選題：回傳 (A), (C) 格式
+    const correctAnswerContents = correct_answer.split(',').map(a => a.trim());
+    const correctAnswerLetters = correctAnswerContents
+      .map(content => {
+        const answerIndex = options.findIndex(opt => opt.trim() === content);
+        return answerIndex !== -1 ? String.fromCharCode(65 + answerIndex) : null;
+      })
+      .filter(letter => letter !== null)
+      .sort();
+    return correctAnswerLetters.map(letter => `(${letter})`).join(', ');
+  } else if (type === 'fill') {
+    // 選填題：顯示完整答案
+    return correct_answer;
+  }
+
+  return correct_answer;
 }
 
 onMounted(() => {

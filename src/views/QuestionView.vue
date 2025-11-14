@@ -78,11 +78,11 @@
               <td>{{ getTypeName(q.type) }}</td>
               <td>
                 <div v-if="q.type === 'single' || q.type === 'multiple'" class="answer-cell">
-                  <div v-for="(opt, idx) in q.options" :key="idx">
-                    <div v-if="isCorrectAnswer(q.answer, idx, q.options)" class="answer-item">
-                      ({{ String.fromCharCode(65 + idx) }}) <MathContent :content="opt" />
-                    </div>
-                  </div>
+                  <span v-for="(opt, idx) in q.options" :key="idx">
+                    <span v-if="isCorrectAnswer(q.answer, idx, q.options)" class="answer-item">
+                      ({{ String.fromCharCode(65 + idx) }})
+                    </span>
+                  </span>
                 </div>
                 <div v-else class="answer-cell">
                   <MathContent :content="q.answer" />
@@ -1381,21 +1381,6 @@ h2 { margin-bottom: 20px; }
   width: auto;
   padding: 0;
   margin: 0;
-}
-
-/* 答案欄位樣式 */
-.answer-cell {
-  font-size: 12px;
-  line-height: 1.6;
-  text-align: left;
-}
-
-.answer-item {
-  margin-bottom: 4px;
-}
-
-.answer-item:last-child {
-  margin-bottom: 0;
 }
 
 /* 類題生成相關樣式 */
