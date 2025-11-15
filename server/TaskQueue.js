@@ -120,7 +120,8 @@ class TaskQueue {
           // 加上 AI 標記並存入資料庫
           const contentWithTag = generatedQuestion.content + ' (AI生成)';
           
-          await connection.query(
+          // 插入題目主表
+          const [insertResult] = await connection.query(
             'INSERT INTO question (level, topic, concept, content, image_url, type, answer, difficulty) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [
               sourceQuestion.level,
@@ -133,6 +134,52 @@ class TaskQueue {
               generatedQuestion.difficulty || sourceQuestion.difficulty
             ]
           );
+          
+          const newQuestionId = insertResult.insertId;
+          
+          // 如果是選擇題，插入選項並更新答案為內容
+          if ((generatedQuestion.type === 'single' || generatedQuestion.type === 'multiple') && 
+              generatedQuestion.choices && generatedQuestion.choices.length > 0) {
+            
+            const choices = generatedQuestion.choices;
+            const correctAnswer = generatedQuestion.answer || '';
+            
+            console.log(`[TaskQueue] 原始選項:`, choices);
+            console.log(`[TaskQueue] 正確答案:`, correctAnswer);
+            
+            // 清理選項：移除可能的選項編號前綴
+            const cleanedChoices = choices.map(choice => 
+              choice.replace(/^[\(（]?[A-Za-z][\)）]?[\s\.]*/, '').trim()
+            );
+            
+            console.log(`[TaskQueue] 清理後選項:`, cleanedChoices);
+            
+            // 隨機打亂選項順序
+            const shuffledChoices = [...cleanedChoices];
+            for (let j = shuffledChoices.length - 1; j > 0; j--) {
+              const k = Math.floor(Math.random() * (j + 1));
+              [shuffledChoices[j], shuffledChoices[k]] = [shuffledChoices[k], shuffledChoices[j]];
+            }
+            
+            console.log(`[TaskQueue] 打亂後選項:`, shuffledChoices);
+            
+            // 插入選項到 question_options（不含前綴的純內容）
+            for (let j = 0; j < shuffledChoices.length; j++) {
+              await connection.query(
+                'INSERT INTO question_options (question_id, option_order, option_content) VALUES (?, ?, ?)',
+                [newQuestionId, j, shuffledChoices[j]]
+              );
+            }
+            
+            // 答案欄位直接儲存正確答案的內容（不是索引）
+            // 對於多選題，答案可能是 "答案1,答案2" 格式
+            await connection.query(
+              'UPDATE question SET answer = ? WHERE id = ?',
+              [correctAnswer, newQuestionId]
+            );
+            
+            console.log(`[TaskQueue] 已插入 ${shuffledChoices.length} 個選項，正確答案內容: ${correctAnswer}`);
+          }
 
           successfulCount += 1;
 
@@ -313,12 +360,18 @@ class TaskQueue {
 
       console.log(`[TaskQueue] 原始答案: "${generatedQuestion.answer}" → 清理後: "${cleanAnswer}"`);
 
+      // 轉換難度為中文
+      const difficultyInChinese = generatedQuestion.difficulty 
+        ? this.convertDifficultyToChinese(generatedQuestion.difficulty)
+        : sourceQuestion.difficulty;
+
       // 返回符合資料庫格式的物件
       return {
         content: generatedQuestion.question,
         type: sourceQuestion.type,
         answer: cleanAnswer,
-        difficulty: sourceQuestion.difficulty,
+        difficulty: difficultyInChinese,
+        choices: generatedQuestion.choices || null, // 保留選項資料
         // 額外保存完整資料（未來可能需要）
         fullData: generatedQuestion
       };
@@ -524,7 +577,7 @@ class TaskQueue {
   }
 
   /**
-   * 輔助函數：難度轉換
+   * 輔助函數：難度轉換 (中文 → 英文，給 AI)
    */
   getDifficultyText(difficulty) {
     const map = {
@@ -534,6 +587,18 @@ class TaskQueue {
       '魔王': 'hard'
     };
     return map[difficulty] || 'medium';
+  }
+
+  /**
+   * 輔助函數：難度反轉換 (英文 → 中文，給資料庫)
+   */
+  convertDifficultyToChinese(difficulty) {
+    const map = {
+      easy: '容易',
+      medium: '中等',
+      hard: '困難'
+    };
+    return map[difficulty] || '中等';
   }
 
   /**
