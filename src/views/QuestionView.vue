@@ -566,8 +566,9 @@ async function editQuestion(question) {
           editOptions.value = [...data.options]; // 複製陣列避免引用問題
           
           console.log('[編輯] 載入選項:', editOptions.value);
+          console.log('[編輯] 答案欄位:', question.answer);
           
-          // 根據答案內容找出對應的選項索引
+          // 答案欄位儲存的是內容（如 "24年" 或 "答案1,答案2"）
           const answerParts = question.answer.split(',').map(a => a.trim());
           
           if (question.type === 'single') {
@@ -675,7 +676,7 @@ async function saveEdit() {
       return;
     }
     
-    // 關鍵修正：答案儲存為選項內容（即時取得當前的選項內容）
+    // 答案儲存為選項內容
     finalAnswer = editOptions.value[editSelectedAnswerIndex.value].trim();
     finalOptions = JSON.stringify(editOptions.value.map(opt => opt.trim()));
     
@@ -693,7 +694,7 @@ async function saveEdit() {
       return;
     }
     
-    // 關鍵修正：答案儲存為選項內容（即時取得當前的選項內容）
+    // 答案儲存為選項內容（逗號分隔）
     finalAnswer = editSelectedAnswerIndexes.value
       .map(index => editOptions.value[index].trim())
       .join(',');
