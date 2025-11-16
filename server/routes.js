@@ -87,6 +87,27 @@ const parseJsonArrayField = (value) => {
   return [];
 };
 
+let questionVideoTableEnsured = false;
+const ensureQuestionVideoTable = async () => {
+  if (questionVideoTableEnsured) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS question_videos (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      question_id INT NOT NULL UNIQUE,
+      video_id VARCHAR(100) NOT NULL,
+      video_url VARCHAR(255) NOT NULL,
+      style VARCHAR(50) DEFAULT 'simple',
+      duration DECIMAL(10,2) NULL,
+      status ENUM('ready','failed','processing') DEFAULT 'ready',
+      metadata TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+  questionVideoTableEnsured = true;
+};
+
 // 設定檔案上傳
 const storage = multer.diskStorage({
   destination: './uploads/',
@@ -432,6 +453,68 @@ router.get('/question/:id', async (req, res) => {
   }
 });
 
+// 取得題目的影片資訊（若已生成）
+router.get('/question/:id/video', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await ensureQuestionVideoTable();
+    const [rows] = await pool.query(
+      `SELECT question_id, video_id, video_url, style, duration, status, metadata, created_at, updated_at
+       FROM question_videos
+       WHERE question_id = ?`,
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.json({ exists: false });
+    }
+
+    res.json({ exists: true, video: rows[0] });
+  } catch (error) {
+    console.error('查詢題目影片失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '查詢題目影片失敗',
+      error: error.message
+    });
+  }
+});
+
+// 批次查詢題目影片狀態
+router.post('/questions/videos/status', async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.json({ records: [] });
+    }
+
+    await ensureQuestionVideoTable();
+
+    const uniqueIds = [...new Set(ids.filter(id => Number.isInteger(Number(id))))];
+    if (uniqueIds.length === 0) {
+      return res.json({ records: [] });
+    }
+
+    const placeholders = uniqueIds.map(() => '?').join(',');
+    const [rows] = await pool.query(
+      `SELECT question_id, video_id, video_url, style, duration, status, metadata, created_at, updated_at
+       FROM question_videos
+       WHERE question_id IN (${placeholders})`,
+      uniqueIds
+    );
+
+    res.json({ records: rows });
+  } catch (error) {
+    console.error('批次查詢題目影片狀態失敗:', error);
+    res.status(500).json({
+      success: false,
+      message: '查詢題目影片狀態失敗',
+      error: error.message
+    });
+  }
+});
+
 // 編輯題目 API
 router.put('/question/:id', async (req, res) => {
   const connection = await pool.getConnection();
@@ -597,13 +680,52 @@ router.delete('/classes/:id', async (req, res) => {
 router.post('/video/generate', async (req, res) => {
   console.log('影片生成 API 被呼叫，請求內容:', req.body);
   
+  const { question, script, audioUrl, style = 'simple', options = {}, questionId } = req.body;
+
+  if (!question || !script) {
+    return res.status(400).json({ error: 'Question and script are required.' });
+  }
+
+  let processingRecordCreated = false;
+
   try {
-    const { question, script, audioUrl, style = 'simple', options = {} } = req.body;
-    
-    if (!question || !script) {
-      return res.status(400).json({ error: 'Question and script are required.' });
+    if (questionId) {
+      await ensureQuestionVideoTable();
+      const [existingVideos] = await pool.query(
+        'SELECT status FROM question_videos WHERE question_id = ? LIMIT 1',
+        [questionId]
+      );
+
+      if (existingVideos.length && existingVideos[0].status === 'processing') {
+        return res.status(409).json({ error: '影片正在生成中' });
+      }
+
+      const processingVideoId = `processing_${Date.now()}`;
+      const processingMetadata = {
+        scriptTitle: script?.title || null,
+        sceneCount: Array.isArray(script?.scenes) ? script.scenes.length : 0,
+        options,
+        status: 'processing',
+        startedAt: new Date().toISOString()
+      };
+
+      await pool.query(
+        `INSERT INTO question_videos (question_id, video_id, video_url, style, duration, status, metadata)
+         VALUES (?, ?, '', ?, NULL, 'processing', ?)
+         ON DUPLICATE KEY UPDATE
+           video_id = VALUES(video_id),
+           video_url = VALUES(video_url),
+           style = VALUES(style),
+           duration = NULL,
+           status = 'processing',
+           metadata = VALUES(metadata),
+           updated_at = CURRENT_TIMESTAMP`,
+        [questionId, processingVideoId, style, JSON.stringify(processingMetadata)]
+      );
+
+      processingRecordCreated = true;
     }
-    
+
     console.log('開始生成影片...');
     console.log('影片樣式:', style);
     console.log('場景數量:', script.scenes.length);
@@ -612,17 +734,70 @@ router.post('/video/generate', async (req, res) => {
     const videoGenerator = new VideoGenerator();
     const videoResult = await videoGenerator.generateMathVideo(question, script, style, options);
     
-    res.status(200).json({
+    const responsePayload = {
       success: true,
       videoUrl: videoResult.videoUrl,
       videoId: videoResult.videoId,
       duration: videoResult.duration,
       size: videoResult.size,
       message: '影片生成完成'
-    });
+    };
+
+    if (questionId) {
+      try {
+        const numericDuration = typeof videoResult.duration === 'number'
+          ? videoResult.duration
+          : parseFloat(videoResult.duration) || null;
+        const metadataPayload = {
+          scriptTitle: script?.title || null,
+          sceneCount: Array.isArray(script?.scenes) ? script.scenes.length : 0,
+          options,
+          status: 'ready',
+          completedAt: new Date().toISOString()
+        };
+        await pool.query(
+          `INSERT INTO question_videos (question_id, video_id, video_url, style, duration, status, metadata)
+           VALUES (?, ?, ?, ?, ?, 'ready', ?)
+           ON DUPLICATE KEY UPDATE
+             video_id = VALUES(video_id),
+             video_url = VALUES(video_url),
+             style = VALUES(style),
+             duration = VALUES(duration),
+             status = 'ready',
+             metadata = VALUES(metadata),
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            questionId,
+            videoResult.videoId,
+            videoResult.videoUrl,
+            style,
+            numericDuration,
+            JSON.stringify(metadataPayload)
+          ]
+        );
+      } catch (storeError) {
+        console.error('儲存題目影片資料失敗:', storeError);
+      }
+    }
+
+    res.status(200).json(responsePayload);
     
   } catch (error) {
     console.error('影片生成錯誤:', error);
+
+    if (questionId && processingRecordCreated) {
+      try {
+        await pool.query(
+          `UPDATE question_videos 
+           SET status = 'failed', metadata = JSON_SET(COALESCE(NULLIF(metadata, ''), '{}'), '$.lastError', ?), updated_at = CURRENT_TIMESTAMP
+           WHERE question_id = ?`,
+          [error.message, questionId]
+        );
+      } catch (updateError) {
+        console.error('更新影片狀態失敗:', updateError);
+      }
+    }
+
     res.status(500).json({ 
       error: 'Failed to generate video', 
       details: error.message 

@@ -24,16 +24,33 @@ class AudioSyncManager {
    */
   async generateSyncedAudio(narrativeScenes) {
     const audioSegments = [];
+    const artifacts = {
+      tempFiles: new Set(),
+      publicFiles: new Set()
+    };
     let currentTime = 0;
 
     for (const scene of narrativeScenes) {
       const sceneAudio = await this.generateSceneAudio(scene, currentTime);
+      if (sceneAudio.tempFilePath) {
+        artifacts.tempFiles.add(sceneAudio.tempFilePath);
+      }
+      if (sceneAudio.publicFilePath) {
+        artifacts.publicFiles.add(sceneAudio.publicFilePath);
+      }
       audioSegments.push(sceneAudio);
       currentTime = sceneAudio.endTime;
     }
 
     // 合併所有音訊片段
-    const mergedAudioPath = await this.mergeAudioSegments(audioSegments);
+    const mergedResult = await this.mergeAudioSegments(audioSegments);
+    if (mergedResult.tempFilePath) {
+      artifacts.tempFiles.add(mergedResult.tempFilePath);
+    }
+    if (mergedResult.publicFilePath) {
+      artifacts.publicFiles.add(mergedResult.publicFilePath);
+    }
+    const mergedAudioPath = mergedResult.relativePath;
     
     // 計算實際總時長（所有場景的時長總和）
     const actualDuration = audioSegments.reduce((total, seg) => total + seg.duration, 0);
@@ -44,6 +61,8 @@ class AudioSyncManager {
     // 清理 wavBuffer，避免傳遞給 Remotion 的 props 過大
     const cleanedSegments = audioSegments.map(seg => {
       const { wavBuffer, ...cleanSeg } = seg; // 移除 wavBuffer
+      delete cleanSeg.tempFilePath;
+      delete cleanSeg.publicFilePath;
       return cleanSeg;
     });
 
@@ -58,7 +77,11 @@ class AudioSyncManager {
         endTime: seg.endTime,
         duration: seg.duration,
         narrative: seg.narrative
-      }))
+      })),
+      artifacts: {
+        tempFiles: Array.from(artifacts.tempFiles),
+        publicFiles: Array.from(artifacts.publicFiles)
+      }
     };
   }
 
@@ -125,7 +148,9 @@ class AudioSyncManager {
         startTime: startTime,
         endTime: startTime + duration,
         duration: duration,
-        timing: timing || this.estimateTiming(narrative, duration)
+        timing: timing || this.estimateTiming(narrative, duration),
+        tempFilePath: audioFilePath,
+        publicFilePath
       };
     } catch (error) {
       console.error('生成場景音訊失敗:', error);
@@ -414,7 +439,12 @@ class AudioSyncManager {
 
     if (audioSegments.length === 1) {
       console.log('[音訊合併] 只有一個場景，無需合併');
-      return audioSegments[0].audioPath;
+      const [segment] = audioSegments;
+      return {
+        relativePath: segment.audioPath,
+        tempFilePath: segment.tempFilePath || null,
+        publicFilePath: segment.publicFilePath || null
+      };
     }
 
     console.log(`[音訊合併] 開始合併 ${audioSegments.length} 個音訊片段...`);
@@ -480,12 +510,21 @@ class AudioSyncManager {
       console.log(`[音訊合併] 已複製到 public 目錄: audio/${mergedFilename}`);
       
       // 返回相對於 public 目錄的路徑（不含前綴 /，供 staticFile() 使用）
-      return `audio/${mergedFilename}`;
+      return {
+        relativePath: `audio/${mergedFilename}`,
+        tempFilePath: mergedFilePath,
+        publicFilePath
+      };
       
     } catch (error) {
       console.error('[音訊合併] 失敗:', error.message);
       console.log('[音訊合併] 回退到使用第一個場景');
-      return audioSegments[0].audioPath;
+      const fallback = audioSegments[0];
+      return {
+        relativePath: fallback.audioPath,
+        tempFilePath: fallback.tempFilePath || null,
+        publicFilePath: fallback.publicFilePath || null
+      };
     }
   }
 }
