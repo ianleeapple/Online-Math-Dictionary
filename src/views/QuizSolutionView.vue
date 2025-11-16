@@ -109,9 +109,58 @@
             <button class="action-btn video-solution-btn" @click="viewVideoSolution(question, index + 1)">
               查看影音詳解
             </button>
-            <button class="action-btn knowledge-btn" @click="viewKnowledge(question, index + 1)">
-              查看所需知識點
-            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="showSolutionModal" class="modal-overlay" @click.self="closeSolutionModal">
+        <div class="modal-content solution-modal">
+          <div class="solution-header">
+            <h3>第 {{ solutionQuestionNumber }} 題詳解</h3>
+          </div>
+
+          <div class="solution-question-preview" :class="{ placeholder: !solutionQuestion }">
+            <template v-if="solutionQuestion">
+              <MathContent :content="solutionQuestion.content" />
+            </template>
+            <template v-else>
+              正在載入題目內容...
+            </template>
+          </div>
+
+          <div v-if="solutionLoading" class="solution-loading">
+            <div class="spinner"></div>
+            <p>載入詳解中...</p>
+          </div>
+          <div v-else-if="solutionError" class="solution-error">
+            {{ solutionError }}
+          </div>
+          <div v-else-if="solutionQuestion" class="solution-sections">
+            <section class="solution-section">
+              <h4>文字詳解</h4>
+              <div class="solution-box">
+                <p class="solution-box-title">解題概念</p>
+                <ol v-if="solutionQuestion.solution_concept && solutionQuestion.solution_concept.length" class="steps-list">
+                  <li v-for="(step, idx) in solutionQuestion.solution_concept" :key="'concept-' + idx">
+                    <MathContent :content="step" />
+                  </li>
+                </ol>
+                <p v-else class="empty-text">尚未提供解題概念</p>
+              </div>
+              <div class="solution-box">
+                <p class="solution-box-title">詳細計算步驟</p>
+                <ol v-if="solutionQuestion.detailed_steps && solutionQuestion.detailed_steps.length" class="steps-list">
+                  <li v-for="(step, idx) in solutionQuestion.detailed_steps" :key="'detail-' + idx">
+                    <MathContent :content="step" />
+                  </li>
+                </ol>
+                <p v-else class="empty-text">尚未提供計算步驟</p>
+              </div>
+            </section>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn" @click="closeSolutionModal">關閉</button>
           </div>
         </div>
       </div>
@@ -134,6 +183,12 @@ const route = useRoute();
 const quizRecordId = ref(route.params.id);
 const quizRecord = ref(null);
 const loading = ref(true);
+const showSolutionModal = ref(false);
+const solutionLoading = ref(false);
+const solutionError = ref('');
+const solutionQuestion = ref(null);
+const solutionQuestionNumber = ref(null);
+const solutionCache = new Map();
 
 // 載入測驗詳情
 async function loadQuizDetail() {
@@ -211,6 +266,19 @@ async function loadQuizDetail() {
   } finally {
     loading.value = false;
   }
+}
+
+function normalizeSteps(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+  }
+  return [];
 }
 
 // 格式化日期時間(直接加 8 小時) 
@@ -404,19 +472,51 @@ function isCorrect(question) {
 
 // ========== 新增：題目功能按鈕處理函數 ==========
 
-// 查看文字詳解
-function viewTextSolution(question, questionNumber) {
-  alert('還沒做');
+async function viewTextSolution(question, questionNumber) {
+  await openSolutionModal(question, questionNumber);
 }
 
-// 查看影音詳解
 function viewVideoSolution(question, questionNumber) {
   alert('還沒做');
 }
 
-// 查看所需知識點
-function viewKnowledge(question, questionNumber) {
-  alert('還沒做');
+async function openSolutionModal(question, questionNumber) {
+  solutionQuestionNumber.value = questionNumber;
+  showSolutionModal.value = true;
+  solutionError.value = '';
+
+  if (solutionCache.has(question.question_id)) {
+    solutionQuestion.value = solutionCache.get(question.question_id);
+    solutionLoading.value = false;
+    return;
+  }
+
+  solutionLoading.value = true;
+  solutionQuestion.value = null;
+
+  try {
+    const response = await fetch(`/api/question/${question.question_id}`);
+    if (!response.ok) {
+      throw new Error('無法載入題目詳解');
+    }
+    const detail = await response.json();
+    const normalized = {
+      content: question.content || detail.content || '',
+      solution_concept: normalizeSteps(detail.solution_concept),
+      detailed_steps: normalizeSteps(detail.detailed_steps)
+    };
+    solutionCache.set(question.question_id, normalized);
+    solutionQuestion.value = normalized;
+  } catch (err) {
+    console.error('載入題目詳解失敗:', err);
+    solutionError.value = err.message || '載入詳解時發生錯誤';
+  } finally {
+    solutionLoading.value = false;
+  }
+}
+
+function closeSolutionModal() {
+  showSolutionModal.value = false;
 }
 
 // 取得使用者答案代號（顯示括號）
@@ -720,5 +820,130 @@ h3 {
   background-color: #c06565;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 720px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.15);
+}
+
+.solution-modal {
+  padding: 0;
+}
+
+.solution-header {
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid #e5e9f0;
+}
+
+.solution-header h3 {
+  margin: 0;
+}
+
+.solution-question-preview {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f0f2f8;
+  background: #fff;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.solution-question-preview.placeholder {
+  color: #6b7280;
+}
+
+.solution-loading,
+.solution-error {
+  text-align: center;
+  color: #4a5568;
+  padding: 16px 0;
+}
+
+.solution-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.solution-section {
+  padding: 1.25rem 1.5rem;
+  background: #fff;
+}
+
+.solution-section + .solution-section {
+  border-top: 1px solid #f0f2f8;
+}
+
+.solution-box {
+  margin-top: 12px;
+  border-radius: 8px;
+  border: 1px solid #e4e7ef;
+  padding: 12px;
+  background: #fafbff;
+}
+
+.solution-box + .solution-box {
+  margin-top: 12px;
+}
+
+.solution-box-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: #3f4a69;
+}
+
+.steps-list {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.steps-list li {
+  margin-bottom: 8px;
+  color: #3b4365;
+}
+
+.empty-text {
+  margin: 0;
+  color: #8a94a7;
+  font-size: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 1rem 1.5rem 1.25rem;
+  border-top: 1px solid #f0f2f8;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 12px;
+  border: 3px solid #dfe3ef;
+  border-top-color: #d67b7b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

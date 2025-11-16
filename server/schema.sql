@@ -69,6 +69,9 @@ CREATE TABLE IF NOT EXISTS question (
   image_url VARCHAR(255) NULL,
   type ENUM('single', 'multiple', 'fill') NOT NULL,
   answer TEXT NULL COMMENT '選填題答案或正確選項的索引(逗號分隔)',
+  analysis TEXT NULL COMMENT '題目核心解析',
+  solution_concept TEXT NULL COMMENT 'JSON 陣列：解題概念步驟',
+  detailed_steps TEXT NULL COMMENT 'JSON 陣列：詳細計算步驟',
   difficulty ENUM('容易', '中等', '困難', '魔王') NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -125,19 +128,3 @@ CREATE TABLE IF NOT EXISTS quiz_record_details (
   question_id INT NOT NULL,
   user_answer TEXT NULL COMMENT '使用者的答案',
   option_order TEXT NULL COMMENT '選項順序（JSON陣列，記錄打亂後的索引順序）',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (quiz_record_id) REFERENCES quiz_records(id) ON DELETE CASCADE,
-  FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
-);
-
--- 訂正記錄表
-CREATE TABLE IF NOT EXISTS correction_records (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  quiz_record_id INT NOT NULL,
-  question_id INT NOT NULL,
-  corrected BOOLEAN DEFAULT FALSE,
-  corrected_at TIMESTAMP NULL DEFAULT NULL,
-  UNIQUE KEY unique_correction (quiz_record_id, question_id),
-  FOREIGN KEY (quiz_record_id) REFERENCES quiz_records(id) ON DELETE CASCADE,
-  FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
-);

@@ -92,6 +92,7 @@
               <td>{{ formatDate(q.created_at) }}</td>
               <td>
                 <div class="action-buttons">
+                  <button class="action-btn solution-btn" @click="openSolutionModal(q)">詳解</button>
                   <button class="action-btn edit-btn" @click="editQuestion(q)">編輯</button>
                   <button class="action-btn generate-btn" @click="openGenerateDialog(q)">產生類題</button>
                   <button class="action-btn delete-btn" @click="deleteQuestion(q.id)">刪除</button>
@@ -135,6 +136,39 @@
         <div class="form-group">
           <label>題目內容 <span class="required">*</span></label>
           <textarea v-model="editForm.content" rows="4" required></textarea>
+        </div>
+
+        <div class="solution-block">
+          <h4>所需知識點</h4>
+          <p class="solution-description">說明本題考驗的核心概念或知識點，可參考 AI Test 裡的「核心概念解析」。</p>
+          <textarea 
+            v-model="editForm.analysis"
+            rows="4"
+            placeholder="請描述此題需要的知識點或概念"
+          ></textarea>
+        </div>
+
+        <div class="solution-block">
+          <h4>文字詳解</h4>
+          <p class="solution-description">將「解題概念」與「詳細計算步驟」整理成文字，方便前端顯示完整詳解。</p>
+          <div class="solution-sub-block">
+            <label>解題概念（每行一個步驟）</label>
+            <textarea 
+              v-model="editSolutionConceptText"
+              rows="4"
+              placeholder="例：先觀察函數變化\n再帶入題目條件 ..."
+            ></textarea>
+            <p class="help-text">系統會自動依序編號，每行代表一個概念步驟。</p>
+          </div>
+          <div class="solution-sub-block">
+            <label>詳細計算步驟（每行一個步驟）</label>
+            <textarea 
+              v-model="editDetailedStepsText"
+              rows="6"
+              placeholder="例：假設 x 為未知數\n列出方程式 ..."
+            ></textarea>
+            <p class="help-text">建議使用「列公式 → 帶數值 → 計算 → 結論」的順序。</p>
+          </div>
         </div>
 
         <div class="form-group">
@@ -247,6 +281,70 @@
             {{ isGenerating ? '建立中...' : '開始生成' }}
           </button>
           <button class="btn cancel-btn" @click="closeGenerateDialog">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 題目詳解對話框 -->
+    <div v-if="showSolutionModal" class="modal-overlay">
+      <div class="modal-content solution-modal">
+        <div class="solution-header">
+          <h3>題目詳解</h3>
+        </div>
+
+        <div class="solution-question-preview" :class="{ placeholder: !solutionQuestion }">
+          <template v-if="solutionQuestion">
+            <MathContent :content="solutionQuestion.content" />
+          </template>
+          <template v-else>
+            正在載入題目內容...
+          </template>
+        </div>
+
+        <div v-if="solutionLoading" class="solution-loading">
+          <div class="spinner"></div>
+          <p>載入詳解中...</p>
+        </div>
+        <div v-else-if="solutionError" class="solution-error">
+          {{ solutionError }}
+        </div>
+        <div v-else-if="solutionQuestion" class="solution-sections">
+          <section class="solution-section">
+            <h4>文字詳解</h4>
+            <div class="solution-box">
+              <p class="solution-box-title">解題概念</p>
+              <ol v-if="solutionQuestion.solution_concept && solutionQuestion.solution_concept.length" class="steps-list">
+                <li v-for="(step, idx) in solutionQuestion.solution_concept" :key="'concept-' + idx">
+                  <MathContent :content="step" />
+                </li>
+              </ol>
+              <p v-else class="empty-text">尚未提供解題概念</p>
+            </div>
+            <div class="solution-box">
+              <p class="solution-box-title">詳細計算步驟</p>
+              <ol v-if="solutionQuestion.detailed_steps && solutionQuestion.detailed_steps.length" class="steps-list">
+                <li v-for="(step, idx) in solutionQuestion.detailed_steps" :key="'detail-' + idx">
+                  <MathContent :content="step" />
+                </li>
+              </ol>
+              <p v-else class="empty-text">尚未提供計算步驟</p>
+            </div>
+          </section>
+
+          <section class="solution-section knowledge-section">
+            <h4>所需知識點</h4>
+            <div class="solution-box">
+              <p class="solution-box-title">核心解析</p>
+              <div v-if="solutionQuestion.analysis" class="analysis-content">
+                <MathContent :content="solutionQuestion.analysis" />
+              </div>
+              <p v-else class="empty-text">尚未提供核心解析</p>
+            </div>
+          </section>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn" @click="closeSolutionModal">關閉</button>
         </div>
       </div>
     </div>
@@ -372,6 +470,10 @@ watch(selectedTopic, () => {
 // questions list
 const questions = ref([]);
 const loading = ref(false);
+const showSolutionModal = ref(false);
+const solutionLoading = ref(false);
+const solutionQuestion = ref(null);
+const solutionError = ref('');
 
 function buildQueryParams() {
   const params = new URLSearchParams();
@@ -431,6 +533,51 @@ function viewRaw(q) {
   alert(JSON.stringify(q, null, 2));
 }
 
+async function openSolutionModal(question) {
+  showSolutionModal.value = true;
+  solutionLoading.value = true;
+  solutionError.value = '';
+  solutionQuestion.value = null;
+
+  try {
+    const res = await fetch(`/api/question/${question.id}`);
+    const rawText = await res.text();
+
+    if (rawText.startsWith('<!DOCTYPE') || rawText.startsWith('<html')) {
+      throw new Error('伺服器回傳 HTML 而非 JSON，請確認後端服務');
+    }
+
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch (error) {
+      throw new Error('伺服器回應格式錯誤');
+    }
+
+    if (!res.ok) {
+      throw new Error(data.message || '載入題目詳解失敗');
+    }
+
+    solutionQuestion.value = {
+      ...data,
+      solution_concept: Array.isArray(data.solution_concept) ? data.solution_concept : [],
+      detailed_steps: Array.isArray(data.detailed_steps) ? data.detailed_steps : [],
+      analysis: data.analysis || ''
+    };
+  } catch (error) {
+    console.error('[詳解] 載入失敗:', error);
+    solutionError.value = error.message || '載入題目詳解失敗';
+  } finally {
+    solutionLoading.value = false;
+  }
+}
+
+function closeSolutionModal() {
+  showSolutionModal.value = false;
+  solutionQuestion.value = null;
+  solutionError.value = '';
+}
+
 function formatDate(ts) {
   if (!ts) return '';
   const d = new Date(ts);
@@ -465,7 +612,8 @@ const editForm = ref({
   content: '',
   type: '',
   answer: '',
-  difficulty: ''
+  difficulty: '',
+  analysis: ''
 });
 
 // 編輯時的選項陣列
@@ -477,6 +625,9 @@ const editSelectedAnswerIndexes = ref([]); // 多選題
 
 // 編輯時的多選題答案陣列
 const editMultipleAnswers = ref([]);
+
+const editSolutionConceptText = ref('');
+const editDetailedStepsText = ref('');
 
 const editTopics = computed(() => {
   if (!editForm.value.level) return [];
@@ -530,108 +681,90 @@ watch(() => editForm.value.type, (newType, oldType) => {
 
 async function editQuestion(question) {
   editingQuestion.value = question;
-  
-  // 設定初始化標記
   isEditingInit.value = true;
-  
-  // 填入表單資料
-  editForm.value = {
-    id: question.id,
-    level: question.level || '',
-    topic: question.topic || '',
-    concept: question.concept || '',
-    content: question.content || '',
-    type: question.type || 'single',
-    answer: question.answer || '',
-    difficulty: question.difficulty || '中等'
+
+  const formatSteps = (steps) => {
+    if (!steps) return '';
+    if (Array.isArray(steps)) return steps.join('\n');
+    if (typeof steps === 'string') return steps;
+    return '';
   };
-  
-  // 載入選項資料
-  if (question.type === 'single' || question.type === 'multiple') {
-    // 先初始化為空陣列（避免顯示舊資料）
-    editOptions.value = question.type === 'single' 
-      ? ['', '', '', ''] 
-      : ['', '', '', '', ''];
+
+  let detailData = null;
+  try {
+    const response = await fetch(`/api/question/${question.id}`);
+    if (!response.ok) {
+      throw new Error('載入題目失敗');
+    }
+    detailData = await response.json();
+  } catch (error) {
+    console.error('[編輯] 載入題目細節失敗，將使用現有資料:', error);
+    detailData = {
+      ...question,
+      options: question.options || [],
+      solution_concept: question.solution_concept || [],
+      detailed_steps: question.detailed_steps || []
+    };
+  }
+
+  const sourceData = detailData || question;
+
+  editForm.value = {
+    id: sourceData.id,
+    level: sourceData.level || '',
+    topic: sourceData.topic || '',
+    concept: sourceData.concept || '',
+    content: sourceData.content || '',
+    type: sourceData.type || 'single',
+    answer: sourceData.answer || '',
+    difficulty: sourceData.difficulty || '中等',
+    analysis: sourceData.analysis || ''
+  };
+
+  editSolutionConceptText.value = formatSteps(sourceData.solution_concept);
+  editDetailedStepsText.value = formatSteps(sourceData.detailed_steps);
+
+  if (sourceData.type === 'single' || sourceData.type === 'multiple') {
+    editOptions.value = sourceData.options && sourceData.options.length > 0
+      ? [...sourceData.options]
+      : (sourceData.type === 'single' ? ['', '', '', ''] : ['', '', '', '', '']);
     editSelectedAnswerIndex.value = null;
     editSelectedAnswerIndexes.value = [];
-    
-    // 從後端取得完整的題目資料（包含選項）
-    try {
-      const response = await fetch(`/api/question/${question.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        
-        // 確保有選項資料
-        if (data.options && data.options.length > 0) {
-          editOptions.value = [...data.options]; // 複製陣列避免引用問題
-          
-          console.log('[編輯] 載入選項:', editOptions.value);
-          console.log('[編輯] 答案欄位:', question.answer);
-          
-          // 答案欄位儲存的是內容（如 "24年" 或 "答案1,答案2"）
-          const answerParts = question.answer.split(',').map(a => a.trim());
-          
-          if (question.type === 'single') {
-            // 單選題：找出答案對應的選項索引
-            const matchedIndex = editOptions.value.findIndex(opt => 
-              answerParts.some(ans => opt.trim() === ans.trim())
-            );
-            editSelectedAnswerIndex.value = matchedIndex !== -1 ? matchedIndex : null;
-            
-            console.log('[編輯] 單選題答案索引:', editSelectedAnswerIndex.value, '答案內容:', answerParts[0]);
-          } else if (question.type === 'multiple') {
-            // 多選題：找出所有答案對應的選項索引
-            editSelectedAnswerIndexes.value = [];
-            answerParts.forEach(answerContent => {
-              const idx = editOptions.value.findIndex(opt => opt.trim() === answerContent.trim());
-              if (idx !== -1) {
-                editSelectedAnswerIndexes.value.push(idx);
-              }
-            });
-            
-            console.log('[編輯] 多選題答案索引:', editSelectedAnswerIndexes.value, '答案內容:', answerParts);
-          }
-        } else {
-          console.warn('[編輯] API 回傳的選項為空，使用預設選項');
-          // 如果 API 沒有回傳選項，保持預設的空陣列
-          editOptions.value = question.type === 'single' 
-            ? ['', '', '', ''] 
-            : ['', '', '', '', ''];
-        }
-      } else {
-        throw new Error('載入題目失敗');
-      }
-    } catch (error) {
-      console.error('[編輯] 載入選項失敗:', error);
-      alert('載入選項失敗，請重試');
-      // 載入失敗時，使用預設的空陣列
-      editOptions.value = question.type === 'single' 
-        ? ['', '', '', ''] 
-        : ['', '', '', '', ''];
-      editSelectedAnswerIndex.value = null;
+
+    const answerParts = (sourceData.answer || '')
+      .split(',')
+      .map(a => a.trim())
+      .filter(Boolean);
+
+    if (sourceData.type === 'single') {
+      const matchedIndex = editOptions.value.findIndex(opt =>
+        answerParts.some(ans => opt.trim() === ans.trim())
+      );
+      editSelectedAnswerIndex.value = matchedIndex !== -1 ? matchedIndex : null;
+    } else {
       editSelectedAnswerIndexes.value = [];
+      answerParts.forEach(answerContent => {
+        const idx = editOptions.value.findIndex(opt => opt.trim() === answerContent.trim());
+        if (idx !== -1) {
+          editSelectedAnswerIndexes.value.push(idx);
+        }
+      });
     }
   } else {
-    // 選填題不需要選項
     editOptions.value = [];
     editSelectedAnswerIndex.value = null;
     editSelectedAnswerIndexes.value = [];
   }
-  
-  // 舊版多選題答案（保留相容性）
-  if (question.type === 'multiple' && question.answer) {
-    editMultipleAnswers.value = question.answer.split(',').map(a => a.trim());
+
+  if (sourceData.type === 'multiple' && sourceData.answer) {
+    editMultipleAnswers.value = sourceData.answer.split(',').map(a => a.trim());
   } else {
     editMultipleAnswers.value = [];
   }
-  
+
   setTimeout(() => {
     isEditingInit.value = false;
   }, 100);
-  
-  console.log('[編輯] 題目資料:', editForm.value);
-  console.log('[編輯] 選項資料:', editOptions.value);
-  console.log('[編輯] 答案索引:', question.type === 'single' ? editSelectedAnswerIndex.value : editSelectedAnswerIndexes.value);
 }
 
 function cancelEdit() {
@@ -649,8 +782,11 @@ function cancelEdit() {
     content: '',
     type: '',
     answer: '',
-    difficulty: ''
+    difficulty: '',
+    analysis: ''
   };
+  editSolutionConceptText.value = '';
+  editDetailedStepsText.value = '';
 }
 
 async function saveEdit() {
@@ -711,6 +847,18 @@ async function saveEdit() {
     finalAnswer = editForm.value.answer.trim();
   }
 
+    const solutionConceptSteps = editSolutionConceptText.value
+      .split(/\r?\n/)
+      .map(step => step.trim())
+      .filter(Boolean);
+
+    const detailedSteps = editDetailedStepsText.value
+      .split(/\r?\n/)
+      .map(step => step.trim())
+      .filter(Boolean);
+
+    const analysisText = editForm.value.analysis ? editForm.value.analysis.trim() : '';
+
   try {
     const updateData = {
       level: editForm.value.level,
@@ -720,7 +868,10 @@ async function saveEdit() {
       type: editForm.value.type,
       answer: finalAnswer,
       difficulty: editForm.value.difficulty,
-      options: finalOptions
+        options: finalOptions,
+        analysis: analysisText,
+        solution_concept: solutionConceptSteps,
+        detailed_steps: detailedSteps
     };
     
     console.log('提交更新資料:', updateData);
@@ -1103,6 +1254,137 @@ h2 { margin-bottom: 20px; }
   border: 1px solid #ccc;
   border-radius: 6px;
   box-sizing: border-box;
+}
+
+.solution-block {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #e1e6ed;
+  border-radius: 8px;
+  background: #fafcff;
+}
+.solution-block h4 {
+  margin: 0 0 8px;
+}
+.solution-description {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #5f6b7a;
+}
+.solution-sub-block {
+  margin-bottom: 12px;
+}
+.solution-sub-block textarea,
+.solution-block textarea {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #cfd5df;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.solution-btn {
+  background-color: #6f42c1;
+  color: #fff;
+}
+.solution-btn:hover {
+  background-color: #5a36a1;
+}
+
+.solution-modal {
+  max-width: 720px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.solution-header {
+  padding: 1.25rem 1.5rem 1rem;
+  background: #fff;
+  border-bottom: 1px solid #e5e9f0;
+}
+
+.solution-header h3 {
+  margin: 0.25rem 0 0;
+}
+
+.solution-question-preview {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f0f2f8;
+  background: #fff;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.solution-question-preview.placeholder {
+  color: #6b7280;
+}
+
+.solution-loading,
+.solution-error {
+  text-align: center;
+  color: #4a5568;
+  padding: 16px 0;
+}
+
+.solution-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.solution-section {
+  padding: 1.25rem 1.5rem;
+  background: #fff;
+}
+
+.solution-section + .solution-section {
+  border-top: 1px solid #f0f2f8;
+  background: #fbfcff;
+}
+
+.solution-section.knowledge-section {
+  background: #fff;
+}
+
+.solution-box {
+  margin-top: 12px;
+  border-radius: 8px;
+  border: 1px solid #e4e7ef;
+  padding: 12px;
+  background: #fafbff;
+}
+
+.solution-box + .solution-box {
+  margin-top: 12px;
+}
+
+.solution-box-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: #3f4a69;
+}
+
+.steps-list {
+  padding-left: 20px;
+  margin: 0;
+  list-style: decimal-leading-zero;
+}
+
+.steps-list li {
+  margin-bottom: 8px;
+  color: #3b4365;
+}
+
+.analysis-content {
+  background: #fff;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #e4e7ef;
+}
+
+.empty-text {
+  margin: 0;
+  color: #8a94a7;
+  font-size: 14px;
 }
 
 .btn {
