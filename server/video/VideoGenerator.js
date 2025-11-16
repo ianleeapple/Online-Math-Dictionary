@@ -2,6 +2,7 @@ const { bundle } = require('@remotion/bundler');
 const { renderMedia, selectComposition } = require('@remotion/renderer');
 const path = require('path');
 const fs = require('fs');
+const fsp = fs.promises;
 const NarrativeScriptGenerator = require('./NarrativeScriptGenerator');
 const AudioSyncManager = require('./AudioSyncManager');
 
@@ -43,6 +44,9 @@ class VideoGenerator {
    * @returns {Promise<string>} 生成的影片檔案路徑
    */
   async generateMathVideo(question, script, style = 'simple', options = {}) {
+    let bundleLocation = null;
+    let audioArtifacts = null;
+
     try {
       console.log('開始生成數學解題影片（智能教學模式）...');
       console.log('題目:', question.question);
@@ -106,6 +110,10 @@ class VideoGenerator {
         console.log('[TTS] 生成同步語音...');
         try {
           audioTimeline = await this.audioSyncManager.generateSyncedAudio(narrativeScript.scenes);
+          audioArtifacts = audioTimeline?.artifacts || null;
+          if (audioTimeline && audioTimeline.artifacts) {
+            delete audioTimeline.artifacts;
+          }
           console.log('[完成] 語音生成完成');
           console.log('音訊時長:', audioTimeline.totalDuration.toFixed(2), '秒');
           console.log('音訊檔案:', audioTimeline.audioPath ? '已生成' : '無');
@@ -168,7 +176,7 @@ class VideoGenerator {
 
       // 2. 打包 Remotion 專案
       console.log('[打包] 正在打包影片組件...');
-      const bundleLocation = await bundle({
+      bundleLocation = await bundle({
         entryPoint: path.join(__dirname, 'components/index.js'),
         // 指定 public 目錄位置（專案根目錄的 public）
         publicDir: path.join(__dirname, '../../public'),
@@ -320,6 +328,8 @@ class VideoGenerator {
     } catch (error) {
       console.error('影片生成失敗:', error);
       throw new Error(`影片生成失敗: ${error.message}`);
+    } finally {
+      await this.cleanupArtifacts({ bundleLocation, audioArtifacts });
     }
   }
 
@@ -342,12 +352,45 @@ class VideoGenerator {
    * 清理暫存檔案
    * @param {string} videoPath - 影片檔案路徑
    */
-  async cleanupTempFiles(videoPath) {
+  async cleanupArtifacts({ bundleLocation, audioArtifacts }) {
+    const cleanupTargets = [];
+
+    if (bundleLocation) {
+      cleanupTargets.push(this.safeRemove(bundleLocation));
+    }
+
+    if (audioArtifacts) {
+      const { tempFiles = [], publicFiles = [] } = audioArtifacts;
+      tempFiles.forEach(filePath => {
+        if (filePath) {
+          cleanupTargets.push(this.safeRemove(filePath));
+        }
+      });
+      publicFiles.forEach(filePath => {
+        if (filePath) {
+          cleanupTargets.push(this.safeRemove(filePath));
+        }
+      });
+    }
+
+    if (cleanupTargets.length === 0) {
+      return;
+    }
+
     try {
-      // 可以在這裡清理打包後的暫存檔案
-      console.log('清理暫存檔案完成');
+      await Promise.allSettled(cleanupTargets);
+      console.log('暫存資源清理完成');
     } catch (error) {
-      console.warn('清理暫存檔案失敗:', error);
+      console.warn('清理暫存資源時發生警告:', error.message);
+    }
+  }
+
+  async safeRemove(targetPath) {
+    if (!targetPath) return;
+    try {
+      await fsp.rm(targetPath, { recursive: true, force: true });
+    } catch (error) {
+      console.warn(`無法刪除暫存資源 (${targetPath}):`, error.message);
     }
   }
 
