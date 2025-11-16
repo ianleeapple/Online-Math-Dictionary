@@ -2,6 +2,51 @@ const mysql = require('mysql2/promise');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const aiConfig = require('./aiConfig');
 
+const sanitizeTextField = (value) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'null' || lowered === 'undefined') {
+    return null;
+  }
+  return trimmed;
+};
+
+const normalizeArrayInput = (input) => {
+  if (input == null) return [];
+
+  let workingValue = input;
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed) return [];
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      workingValue = Array.isArray(parsed) ? parsed : trimmed.split(',');
+    } catch (err) {
+      workingValue = trimmed.includes('\n') ? trimmed.split(/\r?\n/) : trimmed.split(',');
+    }
+  }
+
+  if (!Array.isArray(workingValue)) {
+    workingValue = [workingValue];
+  }
+
+  return workingValue
+    .map((item) => {
+      if (item == null) return '';
+      if (typeof item === 'string') return item.trim();
+      return String(item).trim();
+    })
+    .filter(Boolean);
+};
+
+const prepareArrayForStorage = (input) => {
+  const normalized = normalizeArrayInput(input);
+  return normalized.length > 0 ? JSON.stringify(normalized) : null;
+};
+
 /**
  * AI 題目生成任務佇列處理器
  * 負責背景處理大量題目生成任務，避免 HTTP 請求 timeout
@@ -119,10 +164,22 @@ class TaskQueue {
           
           // 加上 AI 標記並存入資料庫
           const contentWithTag = generatedQuestion.content + ' (AI生成)';
+
+          const analysisText = sanitizeTextField(
+            generatedQuestion.analysis || generatedQuestion.fullData?.analysis
+          );
+          const solutionConceptJson = prepareArrayForStorage(
+            generatedQuestion.solutionConcept || generatedQuestion.fullData?.solution_concept
+          );
+          const detailedStepsJson = prepareArrayForStorage(
+            generatedQuestion.detailedSteps || generatedQuestion.fullData?.detailed_steps
+          );
           
           // 插入題目主表
           const [insertResult] = await connection.query(
-            'INSERT INTO question (level, topic, concept, content, image_url, type, answer, difficulty) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            `INSERT INTO question 
+             (level, topic, concept, content, image_url, type, answer, analysis, solution_concept, detailed_steps, difficulty)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               sourceQuestion.level,
               sourceQuestion.topic,
@@ -131,6 +188,9 @@ class TaskQueue {
               null, // AI 生成的題目目前不包含圖片
               generatedQuestion.type || sourceQuestion.type,
               generatedQuestion.answer || '',
+              analysisText,
+              solutionConceptJson,
+              detailedStepsJson,
               generatedQuestion.difficulty || sourceQuestion.difficulty
             ]
           );
@@ -365,13 +425,20 @@ class TaskQueue {
         ? this.convertDifficultyToChinese(generatedQuestion.difficulty)
         : sourceQuestion.difficulty;
 
+      const analysisText = sanitizeTextField(generatedQuestion.analysis);
+      const solutionConceptArray = normalizeArrayInput(generatedQuestion.solution_concept);
+      const detailedStepsArray = normalizeArrayInput(generatedQuestion.detailed_steps);
+
       // 返回符合資料庫格式的物件
       return {
         content: generatedQuestion.question,
         type: sourceQuestion.type,
         answer: cleanAnswer,
         difficulty: difficultyInChinese,
-        choices: generatedQuestion.choices || null, // 保留選項資料
+        choices: generatedQuestion.choices || null,
+        analysis: analysisText,
+        solutionConcept: solutionConceptArray,
+        detailedSteps: detailedStepsArray,
         // 額外保存完整資料（未來可能需要）
         fullData: generatedQuestion
       };

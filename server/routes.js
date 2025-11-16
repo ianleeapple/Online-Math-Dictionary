@@ -8,6 +8,85 @@ const multer = require('multer');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const aiConfig = require('./aiConfig');
 
+// ===== 共用工具函式 =====
+const sanitizeTextField = (value) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'null' || lowered === 'undefined') {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const normalizeArrayInput = (input) => {
+  if (input == null) return [];
+
+  let workingValue = input;
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed) return [];
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        workingValue = parsed;
+      } else {
+        workingValue = trimmed.includes('\n') ? trimmed.split(/\r?\n/) : trimmed.split(',');
+      }
+    } catch (err) {
+      workingValue = trimmed.includes('\n') ? trimmed.split(/\r?\n/) : trimmed.split(',');
+    }
+  }
+
+  if (!Array.isArray(workingValue)) {
+    workingValue = [workingValue];
+  }
+
+  return workingValue
+    .map((item) => {
+      if (item == null) return '';
+      if (typeof item === 'string') return item.trim();
+      return String(item).trim();
+    })
+    .filter(Boolean);
+};
+
+const prepareArrayForStorage = (input) => {
+  const normalized = normalizeArrayInput(input);
+  return normalized.length > 0 ? JSON.stringify(normalized) : null;
+};
+
+const parseJsonArrayField = (value) => {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value.filter(item => typeof item === 'string' ? item.trim().length > 0 : true);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => (typeof item === 'string' ? item.trim() : String(item).trim()))
+          .filter(Boolean);
+      }
+    } catch (err) {
+      const fallback = trimmed.includes('\n') ? trimmed.split(/\r?\n/) : trimmed.split(',');
+      return fallback.map(item => item.trim()).filter(Boolean);
+    }
+  }
+
+  return [];
+};
+
 // 設定檔案上傳
 const storage = multer.diskStorage({
   destination: './uploads/',
@@ -170,7 +249,8 @@ router.post('/question', upload.single('image'), async (req, res) => {
   try {
     await connection.beginTransaction();
     
-    const { level, topic, concept, content, type, difficulty, answer, options } = req.body;
+    const { level, topic, concept, content, type, difficulty, answer, options,
+      analysis, solution_concept, detailed_steps } = req.body;
     
     if (!level || !topic || !concept || !content || !type || !difficulty) {
       await connection.rollback();
@@ -179,6 +259,10 @@ router.post('/question', upload.single('image'), async (req, res) => {
         message: '缺少必要欄位'
       });
     }
+
+    const analysisText = sanitizeTextField(analysis);
+    const solutionConceptJson = prepareArrayForStorage(solution_concept);
+    const detailedStepsJson = prepareArrayForStorage(detailed_steps);
     
     // 確保上傳目錄存在
     if (!fs.existsSync('./uploads')) {
@@ -189,9 +273,21 @@ router.post('/question', upload.single('image'), async (req, res) => {
     
     // 插入題目主表
     const [result] = await connection.execute(
-      `INSERT INTO question (level, topic, concept, content, image_url, type, answer, difficulty)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [level, topic, concept, content, image_url, type, answer || null, difficulty]
+      `INSERT INTO question (level, topic, concept, content, image_url, type, answer, analysis, solution_concept, detailed_steps, difficulty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        level,
+        topic,
+        concept,
+        content,
+        image_url,
+        type,
+        answer || null,
+        analysisText,
+        solutionConceptJson,
+        detailedStepsJson,
+        difficulty
+      ]
     );
     
     const questionId = result.insertId;
@@ -261,8 +357,14 @@ router.get('/question', async (req, res) => {
     
     const [rows] = await pool.query(query, params);
     
-    // 為每個題目取得選項（如果是單選題或多選題）
+    // 為每個題目取得選項與詳解資料
     for (const question of rows) {
+      question.solution_concept = parseJsonArrayField(question.solution_concept);
+      question.detailed_steps = parseJsonArrayField(question.detailed_steps);
+      if (typeof question.analysis === 'string') {
+        question.analysis = question.analysis.trim();
+      }
+
       if (question.type === 'single' || question.type === 'multiple') {
         const [options] = await pool.query(
           'SELECT option_content FROM question_options WHERE question_id = ? ORDER BY option_order',
@@ -301,6 +403,11 @@ router.get('/question/:id', async (req, res) => {
     }
     
     const question = rows[0];
+    question.solution_concept = parseJsonArrayField(question.solution_concept);
+    question.detailed_steps = parseJsonArrayField(question.detailed_steps);
+    if (typeof question.analysis === 'string') {
+      question.analysis = question.analysis.trim();
+    }
     
     // 如果是單選題或多選題，取得選項
     if (question.type === 'single' || question.type === 'multiple') {
@@ -333,7 +440,8 @@ router.put('/question/:id', async (req, res) => {
     await connection.beginTransaction();
     
     const { id } = req.params;
-    const { level, topic, concept, content, type, answer, difficulty, options } = req.body;
+    const { level, topic, concept, content, type, answer, difficulty, options,
+      analysis, solution_concept, detailed_steps } = req.body;
 
     if (!level || !topic || !concept || !content || !type || !difficulty) {
       await connection.rollback();
@@ -343,12 +451,28 @@ router.put('/question/:id', async (req, res) => {
       });
     }
 
+    const analysisText = sanitizeTextField(analysis);
+    const solutionConceptJson = prepareArrayForStorage(solution_concept);
+    const detailedStepsJson = prepareArrayForStorage(detailed_steps);
+
     // 更新題目主表
     const [result] = await connection.execute(
       `UPDATE question 
-       SET level = ?, topic = ?, concept = ?, content = ?, type = ?, answer = ?, difficulty = ?
+       SET level = ?, topic = ?, concept = ?, content = ?, type = ?, answer = ?, analysis = ?, solution_concept = ?, detailed_steps = ?, difficulty = ?
        WHERE id = ?`,
-      [level, topic, concept, content, type, answer || null, difficulty, id]
+      [
+        level,
+        topic,
+        concept,
+        content,
+        type,
+        answer || null,
+        analysisText,
+        solutionConceptJson,
+        detailedStepsJson,
+        difficulty,
+        id
+      ]
     );
 
     if (result.affectedRows === 0) {
