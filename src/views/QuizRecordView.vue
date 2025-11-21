@@ -85,7 +85,6 @@
           <div class="record-buttons">
             <button class="btn" @click="viewDetail(record)">查看詳解</button>
             <button class="btn" @click="correctPaper(record)">訂正考卷</button>
-            <button class="btn" @click="similarTest(record)">類題考卷</button>
             <button class="btn" @click="retake(record)">再做一次</button>
             <button class="btn" @click="goToQuizCreate">其他測驗</button>
           </div>
@@ -189,13 +188,6 @@ async function correctPaper(record) {
     console.error('訂正考卷失敗:', error);
     alert('訂正考卷失敗: ' + error.message);
   }
-}
-
-// 類題考卷
-function similarTest(record) {
-  console.log('類題考卷:', record);
-  alert('類題考卷功能開發中');
-  // TODO: 實作類題考卷功能
 }
 
 // 再作一次功能

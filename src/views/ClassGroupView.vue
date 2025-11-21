@@ -26,7 +26,6 @@
               <th>學生帳號</th>
               <th>學生姓名</th>
               <th>最後上線時間</th>
-              <th>最後登入 IP</th>
               <th>最近測驗成績</th>
               <th>平均成績</th>
               <th>已進行測驗次數</th>
@@ -35,16 +34,15 @@
           </thead>
           <tbody>
             <tr v-if="group.students.length === 0">
-              <td colspan="8" style="text-align: center; color: #999;">尚無學生加入</td>
+              <td colspan="7" style="text-align: center; color: #999;">尚無學生加入</td>
             </tr>
             <tr v-for="student in group.students" :key="student.id">
               <td>{{ student.email }}</td>
               <td>{{ student.name }}</td>
               <td>{{ formatDate(student.last_login_time) || '尚未登入' }}</td>
-              <td>{{ student.last_login_ip || '-' }}</td>
-              <td style="color: #999;">尚未實作</td>
-              <td style="color: #999;">尚未實作</td>
-              <td style="color: #999;">尚未實作</td>
+              <td>{{ student.stats?.latestScore ?? '無紀錄' }}</td>
+              <td>{{ student.stats?.averageScore ?? '無紀錄' }}</td>
+              <td>{{ student.stats?.totalCount ?? 0 }}</td>
               <td>{{ formatDate(student.joined_at) }}</td>
             </tr>
           </tbody>
@@ -146,6 +144,27 @@ async function loadGroups() {
     
     const res = await fetch(endpoint);
     const data = await res.json();
+    
+    console.log('載入的班級資料:', data);
+    
+    // 如果是老師，先載入每位學生的測驗統計
+    if (isTeacher.value) {
+      for (const group of data) {
+        for (const student of group.students) {
+          try {
+            const statsRes = await fetch(`/api/quiz/stats/student/${student.id}`);
+            const stats = await statsRes.json();
+            console.log(`學生 ${student.id} 的統計:`, stats);
+            student.stats = stats;
+          } catch (error) {
+            console.error(`載入學生 ${student.id} 統計失敗:`, error);
+            student.stats = { latestScore: null, averageScore: null, totalCount: 0 };
+          }
+        }
+      }
+    }
+    
+    console.log('最終的 groups 資料:', data);
     groups.value = data;
   } catch (error) {
     console.error('載入班級失敗:', error);

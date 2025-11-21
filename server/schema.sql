@@ -128,3 +128,19 @@ CREATE TABLE IF NOT EXISTS quiz_record_details (
   question_id INT NOT NULL,
   user_answer TEXT NULL COMMENT '使用者的答案',
   option_order TEXT NULL COMMENT '選項順序（JSON陣列，記錄打亂後的索引順序）',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (quiz_record_id) REFERENCES quiz_records(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
+);
+
+-- 訂正記錄表
+CREATE TABLE IF NOT EXISTS correction_records (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  quiz_record_id INT NOT NULL,
+  question_id INT NOT NULL,
+  corrected BOOLEAN DEFAULT FALSE,
+  corrected_at TIMESTAMP NULL DEFAULT NULL,
+  UNIQUE KEY unique_correction (quiz_record_id, question_id),
+  FOREIGN KEY (quiz_record_id) REFERENCES quiz_records(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
+);

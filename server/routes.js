@@ -2412,4 +2412,53 @@ router.get('/generation-tasks/user/:userId', async (req, res) => {
   }
 });
 
+// 取得學生測驗統計(班級群組老師表格顯示用)
+router.get('/quiz/stats/student/:studentId', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    
+    console.log('查詢學生測驗統計:', studentId);
+    
+    // 查詢該學生的所有測驗記錄
+    const [records] = await pool.query(
+      `SELECT score, created_at 
+       FROM quiz_records 
+       WHERE user_id = ? AND score IS NOT NULL
+       ORDER BY created_at DESC`,
+      [studentId]
+    );
+    
+    console.log('查詢到的測驗記錄:', records);
+    
+    if (records.length === 0) {
+      return res.json({
+        latestScore: null,
+        averageScore: null,
+        totalCount: 0
+      });
+    }
+    
+    // 最近測驗成績（最新一筆）
+    const latestScore = records[0].score;
+    
+    // 平均成績
+    const totalScore = records.reduce((sum, record) => sum + record.score, 0);
+    const averageScore = Math.round(totalScore / records.length);
+    
+    // 測驗次數
+    const totalCount = records.length;
+    
+    console.log('統計結果:', { latestScore, averageScore, totalCount });
+    
+    res.json({
+      latestScore,
+      averageScore,
+      totalCount
+    });
+  } catch (error) {
+    console.error('取得學生測驗統計失敗:', error);
+    res.status(500).json({ message: '取得統計資料失敗', error: error.message });
+  }
+});
+
 module.exports = router;

@@ -13,19 +13,6 @@
       <p><strong>身分：</strong>{{ profile.role }}</p>
       <p><strong>生日：</strong>{{ profile.birthday }}</p>
     </div>
-    <div class="section">
-      <div class="section-title">成就紀錄</div>
-      <div class="achievement-grid">
-        <div v-for="ach in achievements" :key="ach.title" :class="['achievement-card', { achieved: ach.achieved }]" :style="!ach.achieved ? 'background-color:#eeeeee;' : ''">
-          <div class="achievement-title">{{ ach.title }}</div>
-          <div class="achievement-status" :style="!ach.achieved ? 'color:rgb(155,80,80);' : ''">
-            <span v-if="ach.achieved">✔ 已達成</span>
-            <span v-else>✖ 尚未達成</span>
-          </div>
-          <div class="achievement-description">{{ ach.desc }}</div>
-        </div>
-      </div>
-    </div>
 
     <!-- 編輯個人檔案模態框 -->
     <div v-if="isEditing" class="modal-overlay">
@@ -272,38 +259,6 @@ h2 {
   font-weight: bold;
   color: #2d2d2d;
   margin-bottom: 15px;
-}
-.achievement-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 15px;
-}
-.achievement-card {
-  border: 1px solid #ccc;
-  border-radius: 10px;
-  padding: 15px;
-  background-color: #f0f8f0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
-}
-.achievement-card.achieved {
-  border-color: #8bc34a;
-  background-color: #e6f4e6;
-}
-.achievement-title {
-  font-size: 16px;
-  font-weight: bold;
-  color: #2d2d2d;
-}
-.achievement-status {
-  color: green;
-  font-size: 14px;
-}
-.achievement-description {
-  font-size: 14px;
-  color: #555;
 }
 .btn {
   background-color: #d67b7b;
