@@ -138,7 +138,7 @@ const timingOptions = [
 const questionTypes = [
   { label: '單選題', value: 'single' },
   { label: '多選題', value: 'multiple' },
-  { label: '選填題', value: 'fill' }
+  { label: '填充題', value: 'fill' }
 ];
 const selectedLevel = ref('');
 const selectedTopic = ref('');
@@ -208,7 +208,7 @@ async function createQuiz() {
     return;
   }
   
-  // ========== 新增：檢查題目數量是否足夠 ==========
+  // ========== 新增：檢查題目數量是否足夠（按題型分別檢查） ==========
   try {
     // 建立 API 查詢參數
     const params = new URLSearchParams();
@@ -236,27 +236,60 @@ async function createQuiz() {
     const data = await response.json();
     console.log('符合條件的題目總數:', data.length);
 
-    // 篩選題型
-    let filteredQuestions = data;
-    if (selectedQuestionTypes.value.length > 0) {
-      filteredQuestions = data.filter(q => selectedQuestionTypes.value.includes(q.type));
-      console.log('題型篩選後題目數量:', filteredQuestions.length);
-    }
+    // 按題型分類題目
+    const questionsByType = {};
+    selectedQuestionTypes.value.forEach(type => {
+      questionsByType[type] = data.filter(q => q.type === type);
+    });
 
-    // 檢查數量
-    const requestedCount = parseInt(selectedCount.value.split(' ')[0]);
-    
-    if (filteredQuestions.length === 0) {
-      alert('找不到符合條件的題目！\n\n請調整篩選條件後重試。');
+    // 檢查每個勾選的題型是否至少有一題
+    const missingTypes = [];
+    selectedQuestionTypes.value.forEach(type => {
+      const typeLabel = questionTypes.find(t => t.value === type)?.label || type;
+      if (questionsByType[type].length === 0) {
+        missingTypes.push(typeLabel);
+      }
+    });
+
+    if (missingTypes.length > 0) {
+      alert(
+        `找不到符合條件的題目！\n\n` +
+        `以下題型沒有題目：${missingTypes.join('、')}\n\n` +
+        `請調整篩選條件或取消勾選該題型。`
+      );
       return;
     }
+
+    // 計算總可用題目數
+    const totalAvailable = selectedQuestionTypes.value.reduce((sum, type) => {
+      return sum + questionsByType[type].length;
+    }, 0);
+
+    const requestedCount = parseInt(selectedCount.value.split(' ')[0]);
+
+    // 檢查總題數是否足夠（至少要有「勾選題型數量」+ 額外題目）
+    const minRequired = selectedQuestionTypes.value.length; // 每個題型至少一題
     
-    if (filteredQuestions.length < requestedCount) {
+    if (totalAvailable < requestedCount) {
       alert(
         `題目數量不足！\n\n` +
         `欲作答題目數量：${requestedCount} 題\n` +
-        `目前符合條件的題目：${filteredQuestions.length} 題\n\n` +
+        `目前符合條件的題目：${totalAvailable} 題\n` +
+        `（各題型分布：${selectedQuestionTypes.value.map(type => {
+          const typeLabel = questionTypes.find(t => t.value === type)?.label || type;
+          return `${typeLabel} ${questionsByType[type].length}題`;
+        }).join('、')}）\n\n` +
         `請調整篩選條件後重試。`
+      );
+      return;
+    }
+
+    // 如果題數少於勾選的題型數，警告可能無法滿足每個題型至少一題
+    if (requestedCount < minRequired) {
+      alert(
+        `提醒：您勾選了 ${minRequired} 種題型，但只要求 ${requestedCount} 題，\n` +
+        `無法確保每種題型都會出現。\n\n` +
+        `建議至少選擇 ${minRequired} 題以上。`
       );
       return;
     }

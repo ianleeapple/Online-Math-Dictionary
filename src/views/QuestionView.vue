@@ -588,7 +588,7 @@ function getTypeName(type) {
   const typeMap = {
     'single': '單選題',
     'multiple': '多選題',
-    'fill': '選填題'
+    'fill': '填充題'
   };
   return typeMap[type] || type;
 }

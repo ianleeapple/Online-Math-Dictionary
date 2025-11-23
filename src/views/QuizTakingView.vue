@@ -382,7 +382,7 @@ function getQuestionTypeLabel(type) {
   const labels = {
     'single': '單選題',
     'multiple': '多選題',
-    'fill': '選填題'
+    'fill': '填充題'
   };
   return labels[type] || '未知題型';
 }
@@ -510,7 +510,7 @@ async function loadQuizData() {
       questions.value = fetchedQuestions;
       
     } 
-    // ========== 一般模式:從 API 隨機抓取題目（打亂選項） ==========
+    // ========== 一般模式:從 API 隨機抓取題目（打亂選項）並確保每種題型至少一題 ==========
     else {
       console.log('📝 一般模式:隨機抓取題目（打亂選項順序）');
       
@@ -539,31 +539,64 @@ async function loadQuizData() {
       const data = await response.json();
       console.log('從 API 取得題目數量:', data.length);
 
-      // 篩選題型
-      let filteredQuestions = data;
-      if (types) {
-        const typeList = types.split(',');
-        filteredQuestions = data.filter(q => typeList.includes(q.type));
-        console.log('題型篩選後題目數量:', filteredQuestions.length);
-      }
-
       const requestedCount = parseInt(count) || 10;
       
-      if (filteredQuestions.length === 0) {
+      // ========== 新增：確保每個題型至少一題的分配邏輯 ==========
+      let selectedQuestions = [];
+      
+      if (types) {
+        const typeList = types.split(',');
+        console.log('要求的題型:', typeList);
+        
+        // 按題型分類所有題目
+        const questionsByType = {};
+        typeList.forEach(type => {
+          questionsByType[type] = data.filter(q => q.type === type);
+          // 隨機打亂每個題型的題目
+          questionsByType[type] = questionsByType[type].sort(() => Math.random() - 0.5);
+        });
+        
+        // 第一階段：確保每個題型至少選一題
+        typeList.forEach(type => {
+          if (questionsByType[type].length > 0) {
+            selectedQuestions.push(questionsByType[type].shift());
+            console.log(`題型 ${type} 保證選入 1 題`);
+          }
+        });
+        
+        // 第二階段：用剩餘配額隨機填充
+        const remaining = requestedCount - selectedQuestions.length;
+        console.log(`已選 ${selectedQuestions.length} 題，還需要 ${remaining} 題`);
+        
+        if (remaining > 0) {
+          // 將所有剩餘題目合併並隨機排序
+          const remainingQuestions = [];
+          typeList.forEach(type => {
+            remainingQuestions.push(...questionsByType[type]);
+          });
+          remainingQuestions.sort(() => Math.random() - 0.5);
+          
+          // 填充到指定數量
+          selectedQuestions.push(...remainingQuestions.slice(0, remaining));
+        }
+        
+        console.log('最終選擇題目數量:', selectedQuestions.length);
+        console.log('題型分布:', selectedQuestions.map(q => q.type));
+        
+      } else {
+        // 沒有指定題型，隨機選取
+        selectedQuestions = data.sort(() => Math.random() - 0.5).slice(0, requestedCount);
+      }
+
+      if (selectedQuestions.length === 0) {
         alert('找不到符合條件的題目');
         loading.value = false;
         router.push('/quiz/create');
         return;
       }
 
-      // 隨機打亂陣列並取指定數量
-      filteredQuestions = filteredQuestions.sort(() => Math.random() - 0.5);
-      filteredQuestions = filteredQuestions.slice(0, requestedCount);
-
-      console.log('最終題目數量:', filteredQuestions.length);
-
       // 格式化選項並隨機打亂
-      questions.value = filteredQuestions.map(q => {
+      questions.value = selectedQuestions.map(q => {
         let formattedOptions = null;
         let optionOrder = null;
         
@@ -593,7 +626,7 @@ async function loadQuizData() {
           optionOrder: optionOrder
         };
         
-        // ========== 新增：隨機打亂選項 ==========
+        // ========== 隨機打亂選項 ==========
         return shuffleOptions(question);
       });
       
