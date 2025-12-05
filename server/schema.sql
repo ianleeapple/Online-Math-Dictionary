@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS users (
   school VARCHAR(100),
   birthday DATE,
   last_login_time TIMESTAMP NULL DEFAULT NULL,
-  last_login_ip VARCHAR(45) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -45,16 +44,6 @@ CREATE TABLE IF NOT EXISTS quiz (
   timing_mode VARCHAR(50),
   question_types VARCHAR(255),
   corrected BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-);
-
-CREATE TABLE IF NOT EXISTS achievement (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT,
-  type VARCHAR(50),
-  achieved BOOLEAN,
-  description VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
@@ -142,5 +131,20 @@ CREATE TABLE IF NOT EXISTS correction_records (
   corrected_at TIMESTAMP NULL DEFAULT NULL,
   UNIQUE KEY unique_correction (quiz_record_id, question_id),
   FOREIGN KEY (quiz_record_id) REFERENCES quiz_records(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
+);
+
+-- 題目影片表
+CREATE TABLE IF NOT EXISTS question_videos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  question_id INT NOT NULL UNIQUE,
+  video_id VARCHAR(100) NOT NULL,
+  video_url VARCHAR(255) NOT NULL,
+  style VARCHAR(50) DEFAULT 'simple',
+  duration DECIMAL(10,2) NULL,
+  status ENUM('ready','failed','processing') DEFAULT 'ready',
+  metadata TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE
 );

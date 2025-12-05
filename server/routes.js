@@ -221,11 +221,10 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: '密碼錯誤' });
     }
     
-    // 更新最後上線時間和 IP
-    const clientIp = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
+    // 更新最後上線時間
     await pool.query(
-      'UPDATE users SET last_login_time = NOW(), last_login_ip = ? WHERE id = ?',
-      [clientIp, user.id]
+      'UPDATE users SET last_login_time = NOW() WHERE id = ?',
+      [user.id]
     );
     
     // 絕對不要在回應中包含密碼！
@@ -970,7 +969,7 @@ router.get('/classes/teacher/:teacherId', async (req, res) => {
     // 為每個班級取得學生資料
     for (let cls of classes) {
       const [students] = await pool.query(
-        `SELECT u.id, u.name, u.email, u.last_login_time, u.last_login_ip, cm.joined_at 
+        `SELECT u.id, u.name, u.email, u.last_login_time, cm.joined_at 
          FROM class_members cm 
          JOIN users u ON cm.student_id = u.id 
          WHERE cm.class_id = ?`,
