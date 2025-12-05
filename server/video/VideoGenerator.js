@@ -64,40 +64,8 @@ class VideoGenerator {
           console.log('場景數量:', narrativeScript.scenes.length);
           console.log('預估總時長:', narrativeScript.totalDuration, '秒');
         } catch (error) {
-          console.warn('[警告] 旁白腳本生成失敗，使用原始腳本:', error.message);
-          
-          // 回退策略：使用 script.voiceover 作為完整旁白
-          // 將其平均分配到各場景，或使用場景自帶的內容
-          const totalScenes = script.scenes.length;
-          const voiceoverText = script.voiceover || '';
-          
-          narrativeScript = {
-            ...script,
-            scenes: script.scenes.map((scene, index) => {
-              // 優先順序：scene.narrative > scene.content > scene.visualContent > 分配 voiceover 的一部分
-              let sceneNarrative = scene.narrative || 
-                                   scene.content || 
-                                   scene.visualContent;
-              
-              // 如果場景沒有任何內容，嘗試從 voiceover 中提取對應部分
-              if (!sceneNarrative && voiceoverText) {
-                // 簡單策略：將 voiceover 按場景數量分段
-                const avgLength = Math.floor(voiceoverText.length / totalScenes);
-                const start = index * avgLength;
-                const end = index === totalScenes - 1 ? voiceoverText.length : (index + 1) * avgLength;
-                sceneNarrative = voiceoverText.substring(start, end).trim();
-              }
-              
-              return {
-                ...scene,
-                narrative: sceneNarrative || `場景 ${scene.type}`,
-                duration: scene.duration || 5
-              };
-            })
-          };
-          
-          console.log('[回退] 已為', narrativeScript.scenes.length, '個場景添加旁白內容');
-          console.log('[回退] 第一個場景旁白前 100 字:', narrativeScript.scenes[0].narrative?.substring(0, 100));
+          console.error('[錯誤] 旁白腳本生成失敗:', error.message);
+          throw new Error(`旁白腳本生成失敗: ${error.message} (伺服器繁忙，請稍後重試)`);
         }
       }
 
@@ -139,6 +107,7 @@ class VideoGenerator {
         } catch (error) {
           console.error('[錯誤] 語音生成失敗:', error.message);
           console.error('[錯誤] 堆疊:', error.stack);
+          throw new Error(`語音生成失敗: ${error.message} (伺服器繁忙，請稍後重試)`);
         }
       } else {
         console.warn('[警告] 跳過音訊生成');

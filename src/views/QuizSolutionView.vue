@@ -186,7 +186,12 @@
               <p>正在檢查是否已有影片...</p>
             </div>
             <div v-else-if="videoUrl" class="video-player-wrapper">
-              <video :src="videoUrl" controls class="video-player"></video>
+              <video 
+                :src="videoUrl" 
+                controls 
+                class="video-player"
+                @error="handleVideoError"
+              ></video>
             </div>
             <div v-else class="solution-error">
               無法取得影片資料
@@ -742,6 +747,12 @@ function resetVideoModalState() {
   videoMeta.value = null;
 }
 
+function handleVideoError(e) {
+  console.error('影片播放錯誤:', e);
+  videoError.value = '影片檔案無法載入或已損毀，請稍後再試。';
+  videoUrl.value = ''; // 隱藏播放器
+}
+
 function closeVideoModal() {
   showVideoModal.value = false;
   resetVideoModalState();
@@ -811,11 +822,17 @@ async function viewVideoSolution(question, questionNumber) {
 
   try {
     const cachedStatus = videoStatusMap.get(questionId);
+    
+    // 移除快取檢查，強制向後端確認狀態
+    // 這樣可以解決「後端資料已刪除但前端仍顯示可查看」的問題
+    /*
     const cachedVideo = videoCache.get(questionId);
     if (cachedStatus === 'ready' && cachedVideo) {
       applyVideoRecord(cachedVideo);
       return;
     }
+    */
+    
     if (cachedStatus === 'processing') {
       showProcessingState(questionId);
       return;
@@ -843,6 +860,10 @@ async function viewVideoSolution(question, questionNumber) {
       if (status === 'failed') {
         markVideoStatus(questionId, 'failed');
       }
+    } else {
+      // 如果後端回傳沒有影片（例如已被刪除），清除前端狀態
+      videoCache.delete(questionId);
+      videoStatusMap.delete(questionId);
     }
 
     videoLoading.value = false;
