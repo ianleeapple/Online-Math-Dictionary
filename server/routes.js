@@ -469,6 +469,20 @@ router.get('/question/:id/video', async (req, res) => {
       return res.json({ exists: false });
     }
 
+    const video = rows[0];
+
+    // 檢查實體檔案是否存在
+    if (video.status === 'ready' && video.video_id) {
+      const videoPath = path.join(__dirname, 'output', 'videos', `${video.video_id}.mp4`);
+      if (!fs.existsSync(videoPath)) {
+        console.warn(`[警告] 資料庫有紀錄但檔案不存在: ${videoPath}`);
+        // 檔案不存在，視為無影片（並可選擇清理資料庫）
+        // 這裡選擇自動清理資料庫，以便前端能重新生成
+        await pool.query('DELETE FROM question_videos WHERE question_id = ?', [id]);
+        return res.json({ exists: false });
+      }
+    }
+
     res.json({ exists: true, video: rows[0] });
   } catch (error) {
     console.error('查詢題目影片失敗:', error);

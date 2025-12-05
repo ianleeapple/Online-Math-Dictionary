@@ -296,6 +296,57 @@ class TaskQueue {
   }
 
   /**
+   * 修復 JSON 字串中的常見錯誤
+   * 特別是 LaTeX 的反斜線問題
+   */
+  repairJsonString(str) {
+    let result = '';
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+      if (char === '\\') {
+        // 檢查是否為雙反斜線 (原本就是正確的跳脫)
+        if (i + 1 < str.length && str[i+1] === '\\') {
+          result += '\\\\';
+          i++; // 跳過下一個反斜線
+          continue;
+        }
+        
+        // 檢查是否為有效的 JSON 跳脫字元
+        if (i + 1 < str.length) {
+          const nextChar = str[i+1];
+          if (['"', '/', 'b', 'f', 'n', 'r', 't', 'u'].includes(nextChar)) {
+            // 雖然是有效 JSON 跳脫，但可能是 LaTeX 命令
+            // 例如 \frac 被誤認為 \f + rac
+            let isLatex = false;
+            
+            if (nextChar === 'f' && str.startsWith('frac', i + 1)) isLatex = true;
+            else if (nextChar === 'b' && (str.startsWith('begin', i + 1) || str.startsWith('beta', i + 1) || str.startsWith('bar', i + 1) || str.startsWith('bm', i + 1))) isLatex = true;
+            else if (nextChar === 'n' && (str.startsWith('neq', i + 1) || str.startsWith('not', i + 1) || str.startsWith('natural', i + 1))) isLatex = true;
+            else if (nextChar === 'r' && (str.startsWith('right', i + 1) || str.startsWith('rho', i + 1) || str.startsWith('root', i + 1))) isLatex = true;
+            else if (nextChar === 't' && (str.startsWith('text', i + 1) || str.startsWith('times', i + 1) || str.startsWith('tan', i + 1) || str.startsWith('theta', i + 1) || str.startsWith('tau', i + 1))) isLatex = true;
+            
+            if (isLatex) {
+              result += '\\\\'; // 強制跳脫
+            } else {
+              result += '\\'; // 保持原樣 (例如 \n, \t)
+            }
+          } else {
+            // 無效的 JSON 跳脫 (例如 \s, \d, \l, \c, \(, \))
+            // 必須強制跳脫
+            result += '\\\\';
+          }
+        } else {
+          // 字串結尾的反斜線
+          result += '\\\\';
+        }
+      } else {
+        result += char;
+      }
+    }
+    return result;
+  }
+
+  /**
    * 使用 AI 生成單一類題（帶 timeout 和重試）
    * 使用與 routes.js 相同的邏輯
    */
@@ -368,7 +419,23 @@ class TaskQueue {
       // 清理並解析 JSON
       responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
-      const parsedResult = JSON.parse(responseText);
+      let parsedResult;
+      try {
+        parsedResult = JSON.parse(responseText);
+      } catch (e) {
+        console.warn(`[TaskQueue] JSON 解析失敗 (${e.message})，嘗試修復...`);
+        const repairedText = this.repairJsonString(responseText);
+        try {
+          parsedResult = JSON.parse(repairedText);
+          console.log('[TaskQueue] JSON 修復成功');
+        } catch (e2) {
+          console.error('[TaskQueue] JSON 修復失敗:', e2.message);
+          // 輸出部分內容以便除錯
+          console.error('[TaskQueue] 原始回應前 100 字:', responseText.substring(0, 100));
+          console.error('[TaskQueue] 修復後回應前 100 字:', repairedText.substring(0, 100));
+          throw new Error(`AI 回應格式錯誤: ${e.message}`);
+        }
+      }
 
       if (!parsedResult.generated || parsedResult.generated.length === 0) {
         throw new Error('AI 回應中沒有生成的題目');
