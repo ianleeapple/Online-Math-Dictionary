@@ -57,12 +57,21 @@ pnpm-debug.log*
 !.vscode/settings.json
 !.vscode/launch.json
 
+# JetBrains (WebStorm, IntelliJ)
+.idea/
+
+# Vim
+*.swp
+*.swo
+
 # ==================================
 # AI/影片生成檔案 (Generated Media)
 # ==================================
 # 避免將大型媒體檔案加入版控
 /public/audio/
 /public/video/
+# Remotion 手動渲染預設目錄
+/server/video/out/
 *.mp4
 *.webm
 *.mov
@@ -86,6 +95,13 @@ Desktop.ini
 # ==================================
 test-*.js
 **/test-*.js
+
+# 測試覆蓋率報告
+coverage/
+.nyc_output/
+
+# ESLint 快取
+.eslintcache
 
 # 臨時文件與報告
 CLEANUP-REPORT.md

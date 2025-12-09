@@ -46,7 +46,7 @@
 ### 2. 下載與依賴安裝
 ```bash
 # 下載專案
-git clone <repository-url>
+git clone https://github.com/ianleeapple/Online-Math-Dictionary.git
 cd Online-Math-Dictionary
 
 # 安裝前端依賴
